@@ -1,0 +1,7 @@
+{
+  "name": "VisaFlow CRM",
+  "description": "CRM spécialisé pour la gestion des demandes de visa (France, Schengen, etc.) avec automatisation et assistance IA.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
