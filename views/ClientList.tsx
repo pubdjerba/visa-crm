@@ -165,7 +165,7 @@ const ClientList: React.FC<ClientListProps> = ({ clients, onSelectClient, onCrea
         if (window.confirm('Voulez-vous vraiment supprimer ce contact ?')) {
             onDeleteClient(id);
         }
-    }
+    };
 
     const handleWhatsApp = (e: React.MouseEvent, phone: string) => {
         e.stopPropagation();

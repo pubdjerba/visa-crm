@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { AppSettings } from '../types';
-import { SettingsIcon, MoonIcon, SunIcon, PlusIcon, TrashIcon, SaveIcon, GlobeIcon, DownloadIcon, UploadIcon, DatabaseIcon, LayoutIcon, LockIcon, EyeIcon } from '../components/Icons';
+import { SettingsIcon, MoonIcon, SunIcon, PlusIcon, TrashIcon, SaveIcon, GlobeIcon, LayoutIcon, LockIcon, EyeIcon } from '../components/Icons';
 
 interface SettingsViewProps {
     settings: AppSettings;
@@ -135,69 +135,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                 centers: updatedCenters
             });
         }
-    };
-
-    const handleResetData = (e: React.MouseEvent) => {
-        e.preventDefault();
-        if (window.confirm('ATTENTION : Voulez-vous vraiment effacer TOUTES les données (Clients, Historique, Documents) ? Cette action est irréversible.')) {
-            if (onResetAll) {
-                onResetAll();
-            } else {
-                localStorage.clear();
-                window.location.reload();
-            }
-        }
     }
-
-    const handleExportData = () => {
-        const data = {
-            clients: localStorage.getItem('visaflow_clients'),
-            settings: localStorage.getItem('visaflow_settings'),
-            requirements: localStorage.getItem('visaflow_requirements'),
-            resources: localStorage.getItem('visaflow_resources'),
-            tasks: localStorage.getItem('visaflow_tasks'),
-            templates: localStorage.getItem('visaflow_templates'),
-            exportDate: new Date().toISOString()
-        };
-
-        const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `VisaFlow_Backup_${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
-
-    const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const json = JSON.parse(event.target?.result as string);
-
-                if (window.confirm("Cette action va remplacer TOUTES vos données actuelles par celles du fichier. Continuer ?")) {
-                    if (json.clients) localStorage.setItem('visaflow_clients', json.clients);
-                    if (json.settings) localStorage.setItem('visaflow_settings', json.settings);
-                    if (json.requirements) localStorage.setItem('visaflow_requirements', json.requirements);
-                    if (json.resources) localStorage.setItem('visaflow_resources', json.resources);
-                    if (json.tasks) localStorage.setItem('visaflow_tasks', json.tasks);
-                    if (json.templates) localStorage.setItem('visaflow_templates', json.templates);
-
-                    alert("Restauration réussie ! L'application va redémarrer.");
-                    window.location.reload();
-                }
-            } catch (error) {
-                alert("Erreur: Le fichier de sauvegarde est invalide.");
-                console.error(error);
-            }
-        };
-        reader.readAsText(file);
-    };
 
     const moveMenuItem = (index: number, direction: 'up' | 'down') => {
         const currentOrder = [...settings.menuOrder];
@@ -477,47 +415,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                         {(!settings.centers || settings.centers.length === 0) && (
                             <p className="text-sm text-slate-400 italic text-center py-4">Aucun centre configuré.</p>
                         )}
-                    </div>
-                </div>
-
-                {/* Backup & Restore */}
-                <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl shadow-sm border border-indigo-200 dark:border-indigo-900/50 p-6 lg:col-span-2">
-                    <h2 className="text-lg font-bold text-indigo-900 dark:text-indigo-200 mb-2 flex items-center gap-2">
-                        <DatabaseIcon className="w-5 h-5" />
-                        Sauvegarde et Restauration
-                    </h2>
-                    <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-4">
-                        Téléchargez une copie de vos données pour les sécuriser ou les transférer vers un autre ordinateur.
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <button
-                            onClick={handleExportData}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded flex items-center justify-center gap-2 font-medium transition"
-                        >
-                            <DownloadIcon className="w-4 h-4" />
-                            Exporter la base de données
-                        </button>
-
-                        <label className="bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded flex items-center justify-center gap-2 font-medium transition cursor-pointer">
-                            <UploadIcon className="w-4 h-4" />
-                            Importer / Restaurer
-                            <input type="file" accept=".json" className="hidden" onChange={handleImportData} />
-                        </label>
-                    </div>
-                </div>
-
-                {/* Danger Zone */}
-                <div className="bg-red-50 dark:bg-red-900/20 rounded-xl shadow-sm border border-red-200 dark:border-red-900/50 p-6 lg:col-span-2">
-                    <h2 className="text-lg font-bold text-red-800 dark:text-red-400 mb-2">Zone de Danger</h2>
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm text-red-700 dark:text-red-300">Réinitialiser l'application effacera tous les clients et documents.</p>
-                        <button
-                            onClick={handleResetData}
-                            className="bg-white border border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded text-sm font-bold transition"
-                        >
-                            Tout Effacer
-                        </button>
                     </div>
                 </div>
             </div>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Firebase - VisaFlow CRM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .status {
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.loading {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #4caf50;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #f44336;
+        }
+
+        .log-container {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 5px;
+        }
+
+        .log-entry.info {
+            color: #1976d2;
+        }
+
+        .log-entry.success {
+            color: #2e7d32;
+            font-weight: bold;
+        }
+
+        .log-entry.error {
+            color: #c62828;
+            font-weight: bold;
+        }
+
+        .log-entry.warning {
+            color: #f57c00;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 20px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .env-check {
+            background: #fff3e0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .env-check h3 {
+            color: #e65100;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .env-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .env-item .icon {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔥 Test de connexion Firebase</h1>
+        <p class="subtitle">VisaFlow CRM - Vérification de la configuration</p>
+
+        <div id="envCheck" class="env-check">
+            <h3>📋 Variables d'environnement</h3>
+            <div id="envList"></div>
+        </div>
+
+        <div id="status" class="status loading">
+            ⏳ En attente du test...
+        </div>
+
+        <div class="log-container" id="logContainer">
+            <div class="log-entry info">Prêt à tester la connexion Firebase...</div>
+            <div class="log-entry info">Cliquez sur le bouton ci-dessous pour démarrer le test.</div>
+        </div>
+
+        <button id="testButton" onclick="runTest()">🚀 Tester la connexion Firebase</button>
+    </div>
+
+    <script type="module">
+        import { testFirestoreConnection } from './testFirebase.ts';
+
+        // Vérifier les variables d'environnement
+        const envVars = [
+            { name: 'VITE_FIREBASE_API_KEY', value: import.meta.env.VITE_FIREBASE_API_KEY },
+            { name: 'VITE_FIREBASE_AUTH_DOMAIN', value: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN },
+            { name: 'VITE_FIREBASE_PROJECT_ID', value: import.meta.env.VITE_FIREBASE_PROJECT_ID },
+            { name: 'VITE_FIREBASE_STORAGE_BUCKET', value: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET },
+            { name: 'VITE_FIREBASE_MESSAGING_SENDER_ID', value: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID },
+            { name: 'VITE_FIREBASE_APP_ID', value: import.meta.env.VITE_FIREBASE_APP_ID }
+        ];
+
+        const envList = document.getElementById('envList');
+        envVars.forEach(env => {
+            const div = document.createElement('div');
+            div.className = 'env-item';
+            const icon = env.value ? '✅' : '❌';
+            const status = env.value ? 'Définie' : 'Manquante';
+            div.innerHTML = `<span class="icon">${icon}</span> ${env.name}: ${status}`;
+            envList.appendChild(div);
+        });
+
+        // Fonction de log
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = message;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Fonction de test
+        window.runTest = async function () {
+            const button = document.getElementById('testButton');
+            const status = document.getElementById('status');
+            const logContainer = document.getElementById('logContainer');
+
+            // Réinitialiser
+            logContainer.innerHTML = '';
+            button.disabled = true;
+            status.className = 'status loading';
+            status.textContent = '⏳ Test en cours...';
+
+            addLog('🔥 Démarrage du test de connexion Firebase...', 'info');
+            addLog('', 'info');
+
+            // Vérifier les variables d'environnement
+            const missingVars = envVars.filter(env => !env.value);
+            if (missingVars.length > 0) {
+                addLog('❌ Variables d\'environnement manquantes:', 'error');
+                missingVars.forEach(env => {
+                    addLog(`   - ${env.name}`, 'error');
+                });
+                addLog('', 'info');
+                addLog('📝 Action requise:', 'warning');
+                addLog('   1. Vérifiez que le fichier .env.local existe', 'warning');
+                addLog('   2. Vérifiez que toutes les variables sont définies', 'warning');
+                addLog('   3. Redémarrez le serveur (npm run dev)', 'warning');
+
+                status.className = 'status error';
+                status.textContent = '❌ Configuration incomplète';
+                button.disabled = false;
+                return;
+            }
+
+            addLog('✅ Toutes les variables d\'environnement sont définies', 'success');
+            addLog('', 'info');
+
+            try {
+                // Rediriger console.log vers notre interface
+                const originalLog = console.log;
+                const originalError = console.error;
+
+                console.log = function (...args) {
+                    const message = args.join(' ');
+                    if (message.includes('✅')) {
+                        addLog(message, 'success');
+                    } else if (message.includes('❌')) {
+                        addLog(message, 'error');
+                    } else if (message.includes('⚠️') || message.includes('→')) {
+                        addLog(message, 'warning');
+                    } else {
+                        addLog(message, 'info');
+                    }
+                    originalLog.apply(console, args);
+                };
+
+                console.error = function (...args) {
+                    addLog(args.join(' '), 'error');
+                    originalError.apply(console, args);
+                };
+
+                // Exécuter le test
+                const result = await testFirestoreConnection();
+
+                // Restaurer console
+                console.log = originalLog;
+                console.error = originalError;
+
+                if (result) {
+                    status.className = 'status success';
+                    status.textContent = '✅ Connexion Firebase réussie !';
+                } else {
+                    status.className = 'status error';
+                    status.textContent = '❌ Échec de la connexion Firebase';
+                }
+            } catch (error) {
+                addLog('', 'info');
+                addLog('❌ Erreur inattendue:', 'error');
+                addLog(error.message, 'error');
+
+                status.className = 'status error';
+                status.textContent = '❌ Erreur lors du test';
+            }
+
+            button.disabled = false;
+        };
+    </script>
+</body>
+
+</html>

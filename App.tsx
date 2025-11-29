@@ -12,100 +12,103 @@ import ResourcesView from './views/ResourcesView';
 import TasksView from './views/TasksView';
 import TemplatesView from './views/TemplatesView';
 import KanbanView from './views/KanbanView';
-import AnalyticsView from './views/AnalyticsView';
 import LockScreen from './components/LockScreen';
 import { ViewState, Client, Application, DocumentItem, ApplicationStatus, Interaction, VisaRequirement, AppSettings, ExternalResource, TodoTask, LetterTemplate, OpeningLog } from './types';
 import { MOCK_CLIENTS, INITIAL_REQUIREMENTS, DEFAULT_SETTINGS, INITIAL_RESOURCES, INITIAL_TEMPLATES, ALERT_SOUND_B64, INITIAL_OPENING_LOGS } from './constants';
+import { saveClient, updateClient, deleteClient, saveRequirement, saveResource, deleteResource, saveTask, deleteTask, saveTemplate, deleteTemplate, saveOpeningLog, saveSettings } from './services/firebaseService';
+import { useFirebaseRealtime } from './services/useFirebase';
 
 const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<ViewState>('dashboard');
     const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
-    // Settings State
-    const [settings, setSettings] = useState<AppSettings>(() => {
-        try {
-            const savedSettings = localStorage.getItem('visaflow_settings');
-            if (!savedSettings) return DEFAULT_SETTINGS;
-            const parsed = JSON.parse(savedSettings);
-            return {
-                ...DEFAULT_SETTINGS,
-                ...parsed,
-                visaTypes: Array.isArray(parsed.visaTypes) ? parsed.visaTypes : DEFAULT_SETTINGS.visaTypes,
-                destinations: Array.isArray(parsed.destinations) ? parsed.destinations : DEFAULT_SETTINGS.destinations,
-                menuOrder: Array.isArray(parsed.menuOrder) ? parsed.menuOrder : DEFAULT_SETTINGS.menuOrder,
-                appPassword: parsed.appPassword || DEFAULT_SETTINGS.appPassword
-            };
-        } catch (e) {
-            console.error("Settings load error", e);
-            return DEFAULT_SETTINGS;
+    // Firebase Real-time Sync
+    const {
+        clients: firebaseClients,
+        requirements: firebaseRequirements,
+        resources: firebaseResources,
+        tasks: firebaseTasks,
+        templates: firebaseTemplates,
+        openingLogs: firebaseOpeningLogs,
+        settings: firebaseSettings,
+        isLoading: firebaseLoading,
+        error: firebaseError
+    } = useFirebaseRealtime();
+
+    // Local state (synchronized with Firebase)
+    const [clients, setClients] = useState<Client[]>([]);
+    const [requirements, setRequirements] = useState<VisaRequirement[]>([]);
+    const [resources, setResources] = useState<ExternalResource[]>([]);
+    const [tasks, setTasks] = useState<TodoTask[]>([]);
+    const [templates, setTemplates] = useState<LetterTemplate[]>([]);
+    const [openingLogs, setOpeningLogs] = useState<OpeningLog[]>([]);
+    const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+    // Sync Firebase data to local state
+    useEffect(() => {
+        if (!firebaseLoading) {
+            setClients(firebaseClients);
         }
-    });
+    }, [firebaseClients, firebaseLoading]);
+
+    useEffect(() => {
+        if (!firebaseLoading) {
+            setRequirements(firebaseRequirements.length > 0 ? firebaseRequirements : INITIAL_REQUIREMENTS);
+        }
+    }, [firebaseRequirements, firebaseLoading]);
+
+    useEffect(() => {
+        if (!firebaseLoading) {
+            setResources(firebaseResources.length > 0 ? firebaseResources : INITIAL_RESOURCES);
+        }
+    }, [firebaseResources, firebaseLoading]);
+
+    useEffect(() => {
+        if (!firebaseLoading) {
+            setTasks(firebaseTasks);
+        }
+    }, [firebaseTasks, firebaseLoading]);
+
+    useEffect(() => {
+        if (!firebaseLoading) {
+            setTemplates(firebaseTemplates.length > 0 ? firebaseTemplates : INITIAL_TEMPLATES);
+        }
+    }, [firebaseTemplates, firebaseLoading]);
+
+    useEffect(() => {
+        if (!firebaseLoading) {
+            setOpeningLogs(firebaseOpeningLogs.length > 0 ? firebaseOpeningLogs : INITIAL_OPENING_LOGS);
+        }
+    }, [firebaseOpeningLogs, firebaseLoading]);
+
+    useEffect(() => {
+        if (!firebaseLoading && firebaseSettings) {
+            setSettings({
+                ...DEFAULT_SETTINGS,
+                ...firebaseSettings,
+                visaTypes: Array.isArray(firebaseSettings.visaTypes) ? firebaseSettings.visaTypes : DEFAULT_SETTINGS.visaTypes,
+                destinations: Array.isArray(firebaseSettings.destinations) ? firebaseSettings.destinations : DEFAULT_SETTINGS.destinations,
+                menuOrder: Array.isArray(firebaseSettings.menuOrder) ? firebaseSettings.menuOrder : DEFAULT_SETTINGS.menuOrder,
+                appPassword: firebaseSettings.appPassword || DEFAULT_SETTINGS.appPassword
+            });
+        }
+    }, [firebaseSettings, firebaseLoading]);
 
     // Auth State - Default to locked on load
     const [isLocked, setIsLocked] = useState(true);
 
+    // Dark mode and settings sync
     useEffect(() => {
         if (settings.darkMode) {
             document.documentElement.classList.add('dark');
         } else {
             document.documentElement.classList.remove('dark');
         }
-        localStorage.setItem('visaflow_settings', JSON.stringify(settings));
-    }, [settings]);
-
-    const [clients, setClients] = useState<Client[]>(() => {
-        try {
-            const savedClients = localStorage.getItem('visaflow_clients');
-            return savedClients ? JSON.parse(savedClients) : MOCK_CLIENTS;
-        } catch (e) {
-            return MOCK_CLIENTS;
+        // Save to Firebase when settings change (debounced by Firebase hook)
+        if (!firebaseLoading) {
+            saveSettings(settings).catch(e => console.error("Error saving settings:", e));
         }
-    });
-
-    const [requirements, setRequirements] = useState<VisaRequirement[]>(() => {
-        try {
-            const savedReqs = localStorage.getItem('visaflow_requirements');
-            return savedReqs ? JSON.parse(savedReqs) : INITIAL_REQUIREMENTS;
-        } catch (e) {
-            return INITIAL_REQUIREMENTS;
-        }
-    });
-
-    const [resources, setResources] = useState<ExternalResource[]>(() => {
-        try {
-            const savedRes = localStorage.getItem('visaflow_resources');
-            return savedRes ? JSON.parse(savedRes) : INITIAL_RESOURCES;
-        } catch (e) {
-            return INITIAL_RESOURCES;
-        }
-    });
-
-    const [tasks, setTasks] = useState<TodoTask[]>(() => {
-        try {
-            const saved = localStorage.getItem('visaflow_tasks');
-            return saved ? JSON.parse(saved) : [];
-        } catch (e) {
-            return [];
-        }
-    });
-
-    const [templates, setTemplates] = useState<LetterTemplate[]>(() => {
-        try {
-            const saved = localStorage.getItem('visaflow_templates');
-            return saved ? JSON.parse(saved) : INITIAL_TEMPLATES;
-        } catch (e) {
-            return INITIAL_TEMPLATES;
-        }
-    });
-
-    const [openingLogs, setOpeningLogs] = useState<OpeningLog[]>(() => {
-        try {
-            const saved = localStorage.getItem('visaflow_opening_logs');
-            return saved ? JSON.parse(saved) : INITIAL_OPENING_LOGS;
-        } catch (e) {
-            return INITIAL_OPENING_LOGS;
-        }
-    });
+    }, [settings, firebaseLoading]);
 
     const [isRadarActive, setIsRadarActive] = useState(false);
     const [radarAlertQueue, setRadarAlertQueue] = useState<{ clientName: string, destination: string, id: string }[]>([]);
@@ -125,12 +128,7 @@ const App: React.FC = () => {
         }
     }, [isRadarActive]);
 
-    useEffect(() => { localStorage.setItem('visaflow_clients', JSON.stringify(clients)); }, [clients]);
-    useEffect(() => { localStorage.setItem('visaflow_requirements', JSON.stringify(requirements)); }, [requirements]);
-    useEffect(() => { localStorage.setItem('visaflow_resources', JSON.stringify(resources)); }, [resources]);
-    useEffect(() => { localStorage.setItem('visaflow_tasks', JSON.stringify(tasks)); }, [tasks]);
-    useEffect(() => { localStorage.setItem('visaflow_templates', JSON.stringify(templates)); }, [templates]);
-    useEffect(() => { localStorage.setItem('visaflow_opening_logs', JSON.stringify(openingLogs)); }, [openingLogs]);
+    // localStorage sync is now handled by useFirebaseRealtime hook
 
     // Web Worker for Background Timing
     useEffect(() => {
@@ -277,30 +275,49 @@ const App: React.FC = () => {
         setCurrentView('clients');
     };
 
-    const handleCreateClient = (newClient: Client) => {
+    const handleCreateClient = async (newClient: Client) => {
         setClients(prev => [newClient, ...prev]);
         setCurrentView('clients');
+        try {
+            await saveClient(newClient);
+            console.log("✅ Client saved to Firebase:", newClient.id);
+        } catch (error) {
+            console.error("❌ Error saving client to Firebase:", error);
+        }
     };
 
-    const handleDeleteClient = (clientId: string) => {
+    const handleDeleteClient = async (clientId: string) => {
         setClients(prev => prev.filter(c => c.id !== clientId));
         if (selectedClientId === clientId) {
             setSelectedClientId(null);
             setCurrentView('clients');
         }
+        try {
+            await deleteClient(clientId);
+            console.log("✅ Client deleted from Firebase:", clientId);
+        } catch (error) {
+            console.error("❌ Error deleting client from Firebase:", error);
+        }
     };
 
-    const handleUpdateClient = (clientId: string, data: Partial<Client>) => {
+    const handleUpdateClient = async (clientId: string, data: Partial<Client>) => {
         setClients(prev => prev.map(client => {
             if (client.id !== clientId) return client;
             return { ...client, ...data };
         }));
+        try {
+            await updateClient(clientId, data);
+            console.log("✅ Client updated in Firebase:", clientId);
+        } catch (error) {
+            console.error("❌ Error updating client in Firebase:", error);
+        }
     };
 
     const handleAddApplication = (clientId: string, application: Application) => {
+        let updatedClient: Client | undefined;
         setClients(prev => prev.map(client => {
             if (client.id !== clientId) return client;
-            return {
+            updatedClient = {
                 ...client,
                 applications: [application, ...client.applications],
                 history: [{
@@ -310,10 +327,15 @@ const App: React.FC = () => {
                     notes: `Nouveau dossier créé: ${application.visaType} pour ${application.destination}`
                 }, ...client.history]
             };
+            return updatedClient;
         }));
+        if (updatedClient) {
+            saveClient(updatedClient).catch(e => console.error("Error saving client with new app:", e));
+        }
     };
 
     const handleUpdateApplication = (clientId: string, appId: string, data: Partial<Application>) => {
+        let updatedClient: Client | undefined;
         setClients(prev => prev.map(client => {
             if (client.id !== clientId) return client;
 
@@ -325,21 +347,26 @@ const App: React.FC = () => {
                 });
             }
 
-            return {
+            updatedClient = {
                 ...client,
                 applications: client.applications.map(app => {
                     if (app.id !== appId) return app;
                     return { ...app, ...data };
                 })
             };
+            return updatedClient;
         }));
+        if (updatedClient) {
+            updateClient(clientId, { applications: updatedClient.applications }).catch(e => console.error("Error updating client app:", e));
+        }
     };
 
     const handleDeleteApplication = (clientId: string, appId: string) => {
+        let updatedClient: Client | undefined;
         setClients(prev => prev.map(client => {
             if (client.id !== clientId) return client;
             const updatedApps = client.applications.filter(app => app.id !== appId);
-            return {
+            updatedClient = {
                 ...client,
                 applications: updatedApps,
                 history: [{
@@ -349,30 +376,40 @@ const App: React.FC = () => {
                     notes: 'Dossier supprimé'
                 }, ...client.history]
             };
+            return updatedClient;
         }));
+        if (updatedClient) {
+            updateClient(clientId, { applications: updatedClient.applications, history: updatedClient.history }).catch(e => console.error("Error deleting client app:", e));
+        }
     };
 
     const handleToggleArchive = (clientId: string, appId?: string) => {
+        let updatedClient: Client | undefined;
         setClients(prev => prev.map(client => {
             if (client.id !== clientId) return client;
             if (appId) {
-                return {
+                updatedClient = {
                     ...client,
                     applications: client.applications.map(app =>
                         app.id === appId ? { ...app, archived: !app.archived } : app
                     )
                 };
+                return updatedClient;
             }
             return client;
         }));
+        if (updatedClient) {
+            updateClient(clientId, { applications: updatedClient.applications }).catch(e => console.error("Error archiving app:", e));
+        }
     };
 
     const handleUpdateStatus = (clientId: string, appId: string, newStatus: ApplicationStatus) => {
         let updatedApp: Application | null = null;
+        let updatedClient: Client | undefined;
 
         setClients(prev => prev.map(client => {
             if (client.id !== clientId) return client;
-            return {
+            updatedClient = {
                 ...client,
                 applications: client.applications.map(app => {
                     if (app.id !== appId) return app;
@@ -390,7 +427,12 @@ const App: React.FC = () => {
                     ...client.history
                 ]
             };
+            return updatedClient;
         }));
+
+        if (updatedClient) {
+            updateClient(clientId, { applications: updatedClient.applications, history: updatedClient.history }).catch(e => console.error("Error updating status:", e));
+        }
 
         // Automatic Opening Log
         if (newStatus === ApplicationStatus.APPOINTMENT_SET && updatedApp) {
@@ -408,13 +450,15 @@ const App: React.FC = () => {
                 timeOfDay: time
             };
             setOpeningLogs(prev => [newLog, ...prev]);
+            saveOpeningLog(newLog).catch(e => console.error("Error saving opening log:", e));
         }
     };
 
     const handleAddDocument = (clientId: string, appId: string, doc: DocumentItem) => {
+        let updatedClient: Client | undefined;
         setClients(prev => prev.map(client => {
             if (client.id !== clientId) return client;
-            return {
+            updatedClient = {
                 ...client,
                 applications: client.applications.map(app => {
                     if (app.id !== appId) return app;
@@ -427,7 +471,11 @@ const App: React.FC = () => {
                     notes: `Document ajouté: ${doc.name} (${doc.type})`
                 }, ...client.history]
             };
+            return updatedClient;
         }));
+        if (updatedClient) {
+            updateClient(clientId, { applications: updatedClient.applications, history: updatedClient.history }).catch(e => console.error("Error adding document:", e));
+        }
     };
 
     const handleUpdateRequirements = (req: VisaRequirement) => {
@@ -439,18 +487,28 @@ const App: React.FC = () => {
                 return [...prev, req];
             }
         });
+        saveRequirement(req).catch(e => console.error("Error saving requirement:", e));
     };
 
     const handleAddResource = (res: ExternalResource) => {
         setResources(prev => [...prev, res]);
+        saveResource(res).catch(e => console.error("Error saving resource:", e));
     };
 
     const handleUpdateResource = (id: string, updatedRes: Partial<ExternalResource>) => {
-        setResources(prev => prev.map(r => r.id === id ? { ...r, ...updatedRes } : r));
+        setResources(prev => prev.map(r => {
+            if (r.id === id) {
+                const updated = { ...r, ...updatedRes };
+                saveResource(updated).catch(e => console.error("Error saving resource:", e));
+                return updated;
+            }
+            return r;
+        }));
     };
 
     const handleDeleteResource = (id: string) => {
         setResources(prev => prev.filter(r => r.id !== id));
+        deleteResource(id).catch(e => console.error("Error deleting resource:", e));
     };
 
     const handleAddTask = (text: string) => {
@@ -461,26 +519,44 @@ const App: React.FC = () => {
             createdAt: new Date().toISOString()
         };
         setTasks(prev => [newTask, ...prev]);
+        saveTask(newTask).catch(e => console.error("Error saving task:", e));
     };
 
     const handleToggleTask = (id: string) => {
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+        setTasks(prev => prev.map(t => {
+            if (t.id === id) {
+                const updated = { ...t, completed: !t.completed };
+                saveTask(updated).catch(e => console.error("Error updating task:", e));
+                return updated;
+            }
+            return t;
+        }));
     };
 
     const handleDeleteTask = (id: string) => {
         setTasks(prev => prev.filter(t => t.id !== id));
+        deleteTask(id).catch(e => console.error("Error deleting task:", e));
     };
 
     const handleAddTemplate = (tpl: LetterTemplate) => {
         setTemplates(prev => [...prev, tpl]);
+        saveTemplate(tpl).catch(e => console.error("Error saving template:", e));
     };
 
     const handleUpdateTemplate = (id: string, updated: Partial<LetterTemplate>) => {
-        setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updated } : t));
+        setTemplates(prev => prev.map(t => {
+            if (t.id === id) {
+                const newTpl = { ...t, ...updated };
+                saveTemplate(newTpl).catch(e => console.error("Error updating template:", e));
+                return newTpl;
+            }
+            return t;
+        }));
     };
 
     const handleDeleteTemplate = (id: string) => {
         setTemplates(prev => prev.filter(t => t.id !== id));
+        deleteTemplate(id).catch(e => console.error("Error deleting template:", e));
     };
 
     const handleResetAllData = () => {
@@ -506,8 +582,6 @@ const App: React.FC = () => {
         switch (currentView) {
             case 'dashboard':
                 return <Dashboard clients={clients} onSelectClient={handleSelectClient} />;
-            case 'analytics':
-                return <AnalyticsView clients={clients} />;
             case 'clients':
                 return (
                     <ClientList

@@ -141,4 +141,4 @@ export interface OpeningLog {
   timeOfDay: string;
 }
 
-export type ViewState = 'dashboard' | 'clients' | 'archives' | 'calendar' | 'client-detail' | 'requirements' | 'appointment-tracker' | 'resources' | 'settings' | 'tasks' | 'templates' | 'kanban' | 'analytics';
+export type ViewState = 'dashboard' | 'clients' | 'archives' | 'calendar' | 'client-detail' | 'requirements' | 'appointment-tracker' | 'resources' | 'settings' | 'tasks' | 'templates' | 'kanban';
