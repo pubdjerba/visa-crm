@@ -97,18 +97,19 @@ const App: React.FC = () => {
     // Auth State - Default to locked on load
     const [isLocked, setIsLocked] = useState(true);
 
-    // Dark mode and settings sync
+    // Dark mode sync
     useEffect(() => {
         if (settings.darkMode) {
             document.documentElement.classList.add('dark');
         } else {
             document.documentElement.classList.remove('dark');
         }
-        // Save to Firebase when settings change (debounced by Firebase hook)
-        if (!firebaseLoading) {
-            saveSettings(settings).catch(e => console.error("Error saving settings:", e));
-        }
-    }, [settings, firebaseLoading]);
+    }, [settings.darkMode]);
+
+    const handleUpdateSettings = (newSettings: AppSettings) => {
+        setSettings(newSettings);
+        saveSettings(newSettings).catch(e => console.error("Error saving settings:", e));
+    };
 
     const [isRadarActive, setIsRadarActive] = useState(false);
     const [radarAlertQueue, setRadarAlertQueue] = useState<{ clientName: string, destination: string, id: string }[]>([]);
@@ -633,7 +634,7 @@ const App: React.FC = () => {
             case 'templates':
                 return <TemplatesView templates={templates} onAddTemplate={handleAddTemplate} onUpdateTemplate={handleUpdateTemplate} onDeleteTemplate={handleDeleteTemplate} />;
             case 'settings':
-                return <SettingsView settings={settings} onUpdateSettings={setSettings} onResetAll={handleResetAllData} />;
+                return <SettingsView settings={settings} onUpdateSettings={handleUpdateSettings} onResetAll={handleResetAllData} />;
             case 'client-detail':
                 const client = clients.find(c => c.id === selectedClientId);
                 if (!client) return <ClientList clients={clients} onSelectClient={handleSelectClient} onCreateClient={handleCreateClient} onDeleteClient={handleDeleteClient} onUpdateClient={handleUpdateClient} visaTypes={settings.visaTypes} destinations={settings.destinations} centers={settings.centers} />;

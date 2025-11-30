@@ -70,6 +70,25 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
         }
     };
 
+    const getTagColor = (tag: string) => {
+        // Generate consistent color based on tag text
+        const colors = [
+            'bg-gradient-to-r from-pink-500 to-rose-500 text-white',
+            'bg-gradient-to-r from-violet-500 to-purple-500 text-white',
+            'bg-gradient-to-r from-cyan-500 to-blue-500 text-white',
+            'bg-gradient-to-r from-teal-500 to-emerald-500 text-white',
+            'bg-gradient-to-r from-orange-500 to-amber-500 text-white',
+            'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white',
+            'bg-gradient-to-r from-sky-500 to-cyan-500 text-white',
+            'bg-gradient-to-r from-lime-500 to-green-500 text-white',
+        ];
+        let hash = 0;
+        for (let i = 0; i < tag.length; i++) {
+            hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return colors[Math.abs(hash) % colors.length];
+    };
+
     return (
         <div className="p-6 space-y-6 overflow-y-auto h-full bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
             {/* Header */}
@@ -130,15 +149,29 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                             </span>
                         </div>
 
-                        <div className="flex justify-between items-center border-t border-slate-200 dark:border-slate-700 pt-3">
-                            <div>
-                                <p className="font-bold text-slate-800 dark:text-slate-200">{app.destination}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{app.visaType}</p>
+                        <div className="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-2">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold text-slate-800 dark:text-slate-200">{app.destination}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{app.visaType}</p>
+                                </div>
+                                {app.appointmentDate && (
+                                    <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-bold bg-blue-100 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg text-xs">
+                                        <CalendarIcon className="w-3.5 h-3.5" />
+                                        {app.appointmentDate}
+                                    </div>
+                                )}
                             </div>
-                            {app.appointmentDate && (
-                                <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-bold bg-blue-100 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg text-xs">
-                                    <CalendarIcon className="w-3.5 h-3.5" />
-                                    {app.appointmentDate}
+                            {app.tags && app.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {app.tags.map((tag, idx) => (
+                                        <span
+                                            key={idx}
+                                            className={`text-xs px-2 py-1 rounded-md font-medium shadow-sm ${getTagColor(tag)}`}
+                                        >
+                                            {tag}
+                                        </span>
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -164,6 +197,7 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                 <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Client</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Dossier</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Statut</th>
+                                <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Tags</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Infos Clés</th>
                             </tr>
                         </thead>
@@ -196,6 +230,22 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                         <span className={`badge ${getStatusBadgeColor(app.status)}`}>
                                             {app.status}
                                         </span>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {app.tags && app.tags.length > 0 ? (
+                                                app.tags.map((tag, idx) => (
+                                                    <span
+                                                        key={idx}
+                                                        className={`text-xs px-2.5 py-1 rounded-md font-medium shadow-sm ${getTagColor(tag)}`}
+                                                    >
+                                                        {tag}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-slate-400 dark:text-slate-500 italic text-xs">-</span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="p-4 text-sm">
                                         {app.appointmentDate ? (

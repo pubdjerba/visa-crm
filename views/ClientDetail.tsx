@@ -427,6 +427,57 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
         return events.sort((a, b) => a.timestamp - b.timestamp);
     };
 
+    const getTagColor = (tag: string) => {
+        // Generate consistent color based on tag text
+        const colors = [
+            'bg-gradient-to-r from-pink-500 to-rose-500 text-white',
+            'bg-gradient-to-r from-violet-500 to-purple-500 text-white',
+            'bg-gradient-to-r from-cyan-500 to-blue-500 text-white',
+            'bg-gradient-to-r from-teal-500 to-emerald-500 text-white',
+            'bg-gradient-to-r from-orange-500 to-amber-500 text-white',
+            'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white',
+            'bg-gradient-to-r from-sky-500 to-cyan-500 text-white',
+            'bg-gradient-to-r from-lime-500 to-green-500 text-white',
+        ];
+        let hash = 0;
+        for (let i = 0; i < tag.length; i++) {
+            hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return colors[Math.abs(hash) % colors.length];
+    };
+
+    const [newTagInput, setNewTagInput] = useState<{ [appId: string]: string }>({});
+
+    const handleAddTag = (appId: string) => {
+        const tagText = newTagInput[appId]?.trim();
+        if (!tagText) return;
+
+        const app = client.applications.find(a => a.id === appId);
+        if (!app) return;
+
+        const currentTags = app.tags || [];
+        if (currentTags.includes(tagText)) {
+            // Tag already exists
+            setNewTagInput({ ...newTagInput, [appId]: '' });
+            return;
+        }
+
+        onUpdateApplication(client.id, appId, {
+            tags: [...currentTags, tagText]
+        });
+        setNewTagInput({ ...newTagInput, [appId]: '' });
+    };
+
+    const handleRemoveTag = (appId: string, tagToRemove: string) => {
+        const app = client.applications.find(a => a.id === appId);
+        if (!app) return;
+
+        const currentTags = app.tags || [];
+        onUpdateApplication(client.id, appId, {
+            tags: currentTags.filter(t => t !== tagToRemove)
+        });
+    };
+
     const timelineEvents = getTimelineEvents();
 
     return (
@@ -513,90 +564,243 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
                         {activeTab === 'apps' && (
                             <div className="flex flex-col gap-6">
                                 {/* ... App list ... */}
-                                {client.applications.slice().sort((a, b) => b.id.localeCompare(a.id)).map(app => (
-                                    <div
-                                        key={app.id}
-                                        className="border bg-white dark:bg-slate-800 rounded-xl overflow-hidden mb-4 shadow-sm hover:shadow-md transition-shadow border-slate-200 dark:border-slate-700"
-                                    >
+                                {client.applications.slice().sort((a, b) => b.id.localeCompare(a.id)).map(app => {
+                                    const remainingBalance = (app.price || 0) - (app.deposit || 0);
+                                    const depositPercentage = app.price ? ((app.deposit || 0) / app.price) * 100 : 0;
+
+                                    return (
                                         <div
-                                            onClick={() => setSelectedAppId(app.id)}
-                                            className={`p-5 cursor-pointer relative transition-colors ${selectedAppId === app.id ? 'bg-blue-50/50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                                            key={app.id}
+                                            className="border bg-white dark:bg-slate-800 rounded-xl overflow-hidden mb-4 shadow-sm hover:shadow-md transition-shadow border-slate-200 dark:border-slate-700"
                                         >
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div>
-                                                    <div className="flex items-center gap-3 mb-1">
-                                                        <span className="font-bold text-xl text-slate-800 dark:text-white">{app.destination}</span>
-                                                        <span className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300">{app.visaType}</span>
-                                                        {selectedAppId === app.id && (
-                                                            <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full shadow-sm">
-                                                                ACTIF
-                                                            </span>
-                                                        )}
-                                                        {app.archived && (
-                                                            <span className="text-[10px] font-bold text-white bg-orange-500 px-2 py-0.5 rounded-full shadow-sm">
-                                                                ARCHIVÉ
-                                                            </span>
-                                                        )}
+                                            <div
+                                                onClick={() => setSelectedAppId(app.id)}
+                                                className={`p-5 cursor-pointer relative transition-colors ${selectedAppId === app.id ? 'bg-blue-50/50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                                            >
+                                                {/* Header Section */}
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <GlobeIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                                            <span className="font-bold text-2xl text-slate-800 dark:text-white">{app.destination}</span>
+                                                            <span className="text-xs px-2.5 py-1 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 rounded-full text-slate-700 dark:text-slate-300 font-medium">{app.visaType}</span>
+                                                            {selectedAppId === app.id && (
+                                                                <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full shadow-sm">
+                                                                    ACTIF
+                                                                </span>
+                                                            )}
+                                                            {app.archived && (
+                                                                <span className="text-[10px] font-bold text-white bg-orange-500 px-2 py-0.5 rounded-full shadow-sm">
+                                                                    ARCHIVÉ
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
+                                                            {app.center || 'Ambassade'}
+                                                        </p>
                                                     </div>
-                                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">{app.center || 'Ambassade'}</p>
 
-                                                    <div className="mt-3 flex items-center gap-4 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-700/50 p-2 rounded">
-                                                        <div><span className="text-xs text-slate-400">Prix:</span> <span className="font-semibold ml-1">{app.price || 0} TND</span></div>
-                                                        <div><span className="text-xs text-slate-400">Acompte:</span> <span className="font-semibold ml-1">{app.deposit || 0} TND</span></div>
+                                                    <div className="flex flex-col items-end gap-2">
+                                                        <span className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg ${app.status === ApplicationStatus.APPOINTMENT_SET ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' :
+                                                                app.status === ApplicationStatus.WAITING_APPOINTMENT ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white' :
+                                                                    app.status === ApplicationStatus.PROCESSING ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' :
+                                                                        app.status === ApplicationStatus.SUBMITTED ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' :
+                                                                            app.status === ApplicationStatus.READY_PICKUP ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' :
+                                                                                app.status === ApplicationStatus.COMPLETED ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white' :
+                                                                                    app.status === ApplicationStatus.REFUSED ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white' :
+                                                                                        'bg-gradient-to-r from-slate-500 to-gray-500 text-white'
+                                                            }`}>
+                                                            {app.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Progress Bar */}
+                                                <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-4">
+                                                    <div className={`h-full transition-all duration-500 ${app.status === ApplicationStatus.REFUSED ? 'bg-red-500' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`} style={{ width: app.status === ApplicationStatus.COMPLETED ? '100%' : app.status === ApplicationStatus.SUBMITTED ? '60%' : app.status === ApplicationStatus.APPOINTMENT_SET ? '45%' : '20%' }}></div>
+                                                </div>
+
+                                                {/* Information Grid */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                                    {/* Dates Section */}
+                                                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <CalendarIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                                            <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wide">Dates Importantes</h4>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <div className="flex items-center justify-between text-xs">
+                                                                <span className="text-slate-600 dark:text-slate-400">Création:</span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-300">{new Date(app.id.split('_')[1] ? parseInt(app.id.split('_')[1]) : Date.now()).toLocaleDateString('fr-FR')}</span>
+                                                            </div>
+                                                            {app.appointmentDate ? (
+                                                                <div className="flex items-center justify-between text-xs">
+                                                                    <span className="text-slate-600 dark:text-slate-400">Rendez-vous:</span>
+                                                                    <span className="font-bold text-blue-700 dark:text-blue-300">{app.appointmentDate}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center justify-between text-xs">
+                                                                    <span className="text-slate-600 dark:text-slate-400">Rendez-vous:</span>
+                                                                    <span className="text-slate-400 italic">Non fixé</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
 
-                                                    {app.members && app.members.length > 0 && (
-                                                        <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                                                            <span className="font-semibold">Accompagnateurs : </span>
-                                                            {app.members.map(m => m.fullName).join(', ')}
+                                                    {/* Financial Section */}
+                                                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <FileTextIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                                            <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wide">Finances</h4>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <div className="flex items-center justify-between text-xs">
+                                                                <span className="text-slate-600 dark:text-slate-400">Prix total:</span>
+                                                                <span className="font-bold text-slate-800 dark:text-slate-200">{app.price || 0} TND</span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between text-xs">
+                                                                <span className="text-slate-600 dark:text-slate-400">Acompte:</span>
+                                                                <span className="font-bold text-emerald-700 dark:text-emerald-300">{app.deposit || 0} TND</span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between text-xs pt-1 border-t border-emerald-200 dark:border-emerald-900/30">
+                                                                <span className="text-slate-600 dark:text-slate-400">Reste:</span>
+                                                                <span className={`font-bold ${remainingBalance > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
+                                                                    {remainingBalance} TND
+                                                                </span>
+                                                            </div>
+                                                            {app.price > 0 && (
+                                                                <div className="mt-2">
+                                                                    <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300" style={{ width: `${depositPercentage}%` }}></div>
+                                                                    </div>
+                                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 text-center">{depositPercentage.toFixed(0)}% payé</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Members & Documents */}
+                                                {(app.members && app.members.length > 0) || (app.documents && app.documents.length > 0) ? (
+                                                    <div className="bg-slate-50 dark:bg-slate-900/30 p-3 rounded-lg mb-3 border border-slate-200 dark:border-slate-700">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                            {app.members && app.members.length > 0 && (
+                                                                <div>
+                                                                    <div className="flex items-center gap-2 mb-1.5">
+                                                                        <UsersIcon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Accompagnateurs ({app.members.length})</span>
+                                                                    </div>
+                                                                    <p className="text-xs text-slate-600 dark:text-slate-400 pl-5">
+                                                                        {app.members.map(m => m.fullName).join(', ')}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                            {app.documents && app.documents.length > 0 && (
+                                                                <div>
+                                                                    <div className="flex items-center gap-2 mb-1.5">
+                                                                        <FileTextIcon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Documents ({app.documents.length})</span>
+                                                                    </div>
+                                                                    <p className="text-xs text-slate-600 dark:text-slate-400 pl-5">
+                                                                        {app.documents.length} fichier{app.documents.length > 1 ? 's' : ''} ajouté{app.documents.length > 1 ? 's' : ''}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+
+                                                {/* Tags Section */}
+                                                <div className="space-y-2">
+                                                    {app.tags && app.tags.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {app.tags.map((tag, idx) => (
+                                                                <span
+                                                                    key={idx}
+                                                                    className={`text-xs px-2.5 py-1 rounded-md font-medium shadow-sm ${getTagColor(tag)} flex items-center gap-1.5`}
+                                                                >
+                                                                    {tag}
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleRemoveTag(app.id, tag);
+                                                                        }}
+                                                                        className="hover:bg-white/20 rounded-full p-0.5 transition"
+                                                                    >
+                                                                        ×
+                                                                    </button>
+                                                                </span>
+                                                            ))}
                                                         </div>
                                                     )}
-                                                </div>
-
-                                                <div className="flex flex-col items-end gap-2">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${app.status === ApplicationStatus.APPOINTMENT_SET ? 'bg-blue-100 text-blue-800' : app.status === ApplicationStatus.COMPLETED ? 'bg-green-100 text-green-800' : app.status === ApplicationStatus.REFUSED ? 'bg-red-100 text-red-800' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                                                        {app.status}
-                                                    </span>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Ajouter un tag..."
+                                                            className="flex-1 text-xs px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                            value={newTagInput[app.id] || ''}
+                                                            onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                setNewTagInput({ ...newTagInput, [app.id]: e.target.value });
+                                                            }}
+                                                            onKeyPress={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    handleAddTag(app.id);
+                                                                }
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleAddTag(app.id);
+                                                            }}
+                                                            className="text-xs px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition shadow-sm"
+                                                        >
+                                                            +
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                <div className={`h-full transition-all duration-500 ${app.status === ApplicationStatus.REFUSED ? 'bg-red-500' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`} style={{ width: app.status === ApplicationStatus.COMPLETED ? '100%' : app.status === ApplicationStatus.SUBMITTED ? '60%' : app.status === ApplicationStatus.APPOINTMENT_SET ? '45%' : '20%' }}></div>
+                                            {/* Action Buttons */}
+                                            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex flex-wrap justify-end gap-2"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); onToggleArchiveApp(client.id, app.id); }}
+                                                    className={`px-4 py-2 text-xs font-bold border rounded-md transition flex items-center gap-2 shadow-sm ${app.archived ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50' : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'}`}
+                                                >
+                                                    <ArchiveIcon className="w-3 h-3" /> {app.archived ? 'Désarchiver' : 'Archiver'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); openEditAppModal(app); }}
+                                                    className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition flex items-center gap-2 shadow-sm"
+                                                >
+                                                    <EditIcon className="w-3 h-3" /> Modifier
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); openMembersModal(app); }}
+                                                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition flex items-center gap-2 shadow-sm"
+                                                >
+                                                    <UsersIcon className="w-3 h-3" /> Membres
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteApplicationRequest(app.id); }}
+                                                    className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-md transition flex items-center gap-2 shadow-sm"
+                                                >
+                                                    <TrashIcon className="w-3 h-3" /> Supprimer
+                                                </button>
                                             </div>
                                         </div>
-
-                                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); onToggleArchiveApp(client.id, app.id); }}
-                                                className={`px-4 py-2 text-xs font-bold border rounded-md transition flex items-center gap-2 shadow-sm ${app.archived ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50' : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'}`}
-                                            >
-                                                <ArchiveIcon className="w-3 h-3" /> {app.archived ? 'Désarchiver' : 'Archiver'}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); openEditAppModal(app); }}
-                                                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition flex items-center gap-2 shadow-sm"
-                                            >
-                                                <EditIcon className="w-3 h-3" /> Modifier
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); openMembersModal(app); }}
-                                                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition flex items-center gap-2 shadow-sm"
-                                            >
-                                                <UsersIcon className="w-3 h-3" /> Membres
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); handleDeleteApplicationRequest(app.id); }}
-                                                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-md transition flex items-center gap-2 shadow-sm"
-                                            >
-                                                <TrashIcon className="w-3 h-3" /> Supprimer
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 {/* ... */}
                             </div>
                         )}

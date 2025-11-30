@@ -75,6 +75,7 @@ export interface Application {
   members?: FamilyMember[];
   refusalReason?: string;
   archived?: boolean;
+  tags?: string[];
 }
 
 export interface Client {
