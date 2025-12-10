@@ -1,7 +1,6 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { ApplicationStatus, Client } from '../types';
-import { FileTextIcon, CalendarIcon, CheckCircleIcon, SparklesIcon } from '../components/Icons';
+import { FileTextIcon, CalendarIcon, CheckCircleIcon, SparklesIcon, SearchIcon } from '../components/Icons';
 
 interface DashboardProps {
     clients: Client[];
@@ -9,8 +8,10 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
-    // Flatten all active applications from all clients
-    const activeApplications = clients.flatMap(client =>
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Flatten all active activeApplications from all clients
+    const allActiveApplications = clients.flatMap(client =>
         client.applications
             .filter(app => !app.archived) // Only non-archived apps
             .map(app => ({
@@ -34,6 +35,15 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
             [ApplicationStatus.REFUSED]: 70,
         };
         return (statusPriority[a.status] || 99) - (statusPriority[b.status] || 99);
+    });
+
+    const activeApplications = allActiveApplications.filter(app => {
+        const query = searchQuery.toLowerCase();
+        return (
+            app.clientName.toLowerCase().includes(query) ||
+            (app.clientPhone && app.clientPhone.toLowerCase().includes(query)) ||
+            app.destination.toLowerCase().includes(query)
+        );
     });
 
     const getStatusColorClass = (status: ApplicationStatus) => {
@@ -101,11 +111,23 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                         Gérez et suivez tous vos dossiers actifs
                     </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-blue-500/30 flex items-center gap-2 animate-scale-in">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <div className="relative group w-full sm:w-auto">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <SearchIcon className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                        </div>
+                        <input
+                            type="text"
+                            className="pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all w-full sm:w-64 shadow-sm"
+                            placeholder="Rechercher nom, tél..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-blue-500/30 flex items-center gap-2 animate-scale-in whitespace-nowrap hidden sm:flex">
                         <SparklesIcon className="w-5 h-5" />
-                        <span className="font-bold text-lg">{activeApplications.length}</span>
-                        <span className="text-sm font-medium opacity-90">dossiers actifs</span>
+                        <span className="font-bold text-lg">{allActiveApplications.length}</span>
+                        <span className="text-sm font-medium opacity-90">dossiers</span>
                     </div>
                 </div>
             </div>
@@ -126,55 +148,60 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
             )}
 
             {/* Mobile Card View */}
-            <div className="md:hidden space-y-3">
+            <div className="md:hidden space-y-4">
                 {activeApplications.map((app, index) => (
-                    <div
-                        key={`${app.clientId}-${app.id}`}
-                        onClick={() => onSelectClient(app.clientId)}
-                        className={`card-hover p-5 rounded-2xl border-l-4 ${getStatusColorClass(app.status)} animate-slide-up`}
-                        style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className="avatar-gradient flex-shrink-0">
-                                    <img src={app.clientAvatar} alt="" className="w-12 h-12 rounded-full object-cover" />
+                    <div key={`${app.clientId}-${app.id}`}>
+                        <div
+                            onClick={() => onSelectClient(app.clientId)}
+                            className={`card-hover p-5 rounded-2xl border-l-4 ${getStatusColorClass(app.status)} animate-slide-up shadow-sm`}
+                            style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <div className="avatar-gradient flex-shrink-0">
+                                        <img src={app.clientAvatar} alt="" className="w-12 h-12 rounded-full object-cover" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-bold text-slate-900 dark:text-white truncate">{app.clientName}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{app.clientPhone}</p>
+                                    </div>
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="font-bold text-slate-900 dark:text-white truncate">{app.clientName}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{app.clientPhone}</p>
-                                </div>
+                                <span className={`badge ${getStatusBadgeColor(app.status)} flex-shrink-0 ml-2`}>
+                                    {app.status}
+                                </span>
                             </div>
-                            <span className={`badge ${getStatusBadgeColor(app.status)} flex-shrink-0 ml-2`}>
-                                {app.status}
-                            </span>
-                        </div>
 
-                        <div className="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-2">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <p className="font-bold text-slate-800 dark:text-slate-200">{app.destination}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{app.visaType}</p>
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold text-slate-800 dark:text-slate-200">{app.destination}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{app.visaType}</p>
+                                    </div>
+                                    {app.appointmentDate && (
+                                        <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-bold bg-blue-100 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg text-xs">
+                                            <CalendarIcon className="w-3.5 h-3.5" />
+                                            {app.appointmentDate}
+                                        </div>
+                                    )}
                                 </div>
-                                {app.appointmentDate && (
-                                    <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-bold bg-blue-100 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg text-xs">
-                                        <CalendarIcon className="w-3.5 h-3.5" />
-                                        {app.appointmentDate}
+                                {app.tags && app.tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {app.tags.map((tag, idx) => (
+                                            <span
+                                                key={idx}
+                                                className={`text-xs px-2 py-1 rounded-md font-medium shadow-sm ${getTagColor(tag)}`}
+                                            >
+                                                {tag}
+                                            </span>
+                                        ))}
                                     </div>
                                 )}
                             </div>
-                            {app.tags && app.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    {app.tags.map((tag, idx) => (
-                                        <span
-                                            key={idx}
-                                            className={`text-xs px-2 py-1 rounded-md font-medium shadow-sm ${getTagColor(tag)}`}
-                                        >
-                                            {tag}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
                         </div>
+                        {/* Mobile separator line strictly as requested */}
+                        {index < activeApplications.length - 1 && (
+                            <div className="h-px bg-slate-200 dark:bg-slate-700 my-4 mx-2" />
+                        )}
                     </div>
                 ))}
                 {activeApplications.length === 0 && (
@@ -182,17 +209,17 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                         <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
                             <SparklesIcon className="w-10 h-10 text-slate-400 dark:text-slate-500" />
                         </div>
-                        <p className="text-slate-500 dark:text-slate-400 font-medium">Aucun dossier actif</p>
-                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Créez un nouveau dossier pour commencer</p>
+                        <p className="text-slate-500 dark:text-slate-400 font-medium">Aucun dossier trouvé</p>
+                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Essayez une autre recherche ou créez un dossier</p>
                     </div>
                 )}
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden md:block card overflow-hidden animate-fade-in">
+            <div className="hidden md:block card overflow-hidden animate-fade-in shadow-xl border border-slate-200 dark:border-slate-700 rounded-2xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
-                        <thead className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 sticky top-0 z-10">
+                        <thead className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                             <tr>
                                 <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Client</th>
                                 <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Dossier</th>
@@ -201,11 +228,11 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                 <th className="p-4 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Infos Clés</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                        <tbody className="divide-y-2 divide-slate-100 dark:divide-slate-800">
                             {activeApplications.map((app, index) => (
                                 <tr
                                     key={`${app.clientId}-${app.id}`}
-                                    className={`transition-all duration-300 cursor-pointer border-l-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${getStatusColorClass(app.status)} animate-slide-up`}
+                                    className={`transition-all duration-300 cursor-pointer border-l-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 ${getStatusColorClass(app.status)} animate-slide-up border-b border-slate-100 dark:border-slate-800`}
                                     onClick={() => onSelectClient(app.clientId)}
                                     style={{ animationDelay: `${index * 30}ms` }}
                                 >
@@ -215,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                                 <img src={app.clientAvatar} alt="" className="w-11 h-11 rounded-full object-cover" />
                                             </div>
                                             <div>
-                                                <p className="font-semibold text-slate-900 dark:text-white">{app.clientName}</p>
+                                                <p className="font-bold text-slate-900 dark:text-white">{app.clientName}</p>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{app.clientPhone}</p>
                                             </div>
                                         </div>
@@ -223,11 +250,11 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                     <td className="p-4">
                                         <div className="flex flex-col">
                                             <span className="font-bold text-lg text-slate-800 dark:text-slate-200">{app.destination}</span>
-                                            <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{app.visaType} • {app.center || 'Ambassade'}</span>
+                                            <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">{app.visaType} • {app.center || 'Ambassade'}</span>
                                         </div>
                                     </td>
                                     <td className="p-4">
-                                        <span className={`badge ${getStatusBadgeColor(app.status)}`}>
+                                        <span className={`badge ${getStatusBadgeColor(app.status)} shadow-md`}>
                                             {app.status}
                                         </span>
                                     </td>
@@ -262,7 +289,7 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                             <span className="text-slate-400 dark:text-slate-500 italic">-</span>
                                         )}
                                         {app.members && app.members.length > 0 && (
-                                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1">
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1 font-medium">
                                                 <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
                                                 + {app.members.length} pers.
                                             </div>
@@ -272,12 +299,12 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                             ))}
                             {activeApplications.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="p-16 text-center">
+                                    <td colSpan={5} className="p-16 text-center">
                                         <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
                                             <SparklesIcon className="w-10 h-10 text-slate-400 dark:text-slate-500" />
                                         </div>
-                                        <p className="text-slate-500 dark:text-slate-400 font-medium">Aucun dossier actif pour le moment</p>
-                                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Créez un nouveau dossier pour commencer</p>
+                                        <p className="text-slate-500 dark:text-slate-400 font-medium">Aucun dossier trouvé</p>
+                                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Essayez une autre recherche ou créez un dossier</p>
                                     </td>
                                 </tr>
                             )}
