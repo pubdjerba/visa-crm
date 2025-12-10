@@ -58,10 +58,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
         const currentTypes = settings.visaTypes || [];
 
         if (typeToAdd && !currentTypes.some(t => t.toLowerCase() === typeToAdd.toLowerCase())) {
-            onUpdateSettings({
+            const updatedSettings = {
                 ...settings,
                 visaTypes: [...currentTypes, typeToAdd]
-            });
+            };
+            console.log("➕ [SettingsView] Adding visa type:", typeToAdd);
+            console.log("➕ [SettingsView] Updated visaTypes array:", updatedSettings.visaTypes);
+            onUpdateSettings(updatedSettings);
             setNewVisaType('');
         }
     };
@@ -69,10 +72,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
     const handleRemoveVisaType = (typeToRemove: string) => {
         if (window.confirm(`Supprimer le type de visa "${typeToRemove}" ?`)) {
             const updatedTypes = (settings.visaTypes || []).filter(t => t !== typeToRemove);
-            onUpdateSettings({
+            const updatedSettings = {
                 ...settings,
                 visaTypes: updatedTypes
-            });
+            };
+            console.log("➖ [SettingsView] Removing visa type:", typeToRemove);
+            console.log("➖ [SettingsView] Updated visaTypes array:", updatedSettings.visaTypes);
+            onUpdateSettings(updatedSettings);
         }
     };
 

@@ -85,28 +85,31 @@ const KanbanView: React.FC<KanbanViewProps> = ({ clients, onUpdateStatus, onSele
         setDragOverColumn(null);
 
         if (draggedItem && targetStatuses.length > 0) {
-            // Validation: Cannot move to Processing or Completed without an appointment
-            const restrictedStatuses = [
+            const client = clients.find(c => c.id === draggedItem.clientId);
+            const app = client?.applications.find(a => a.id === draggedItem.appId);
+
+            if (!app) {
+                setDraggedItem(null);
+                return;
+            }
+
+            const newStatus = targetStatuses[0];
+
+            // Validation: Cannot move to RDV Fixé or later stages without an appointment
+            const requiresAppointment = [
+                ApplicationStatus.APPOINTMENT_SET,
                 ApplicationStatus.SUBMITTED,
                 ApplicationStatus.PROCESSING,
                 ApplicationStatus.READY_PICKUP,
                 ApplicationStatus.COMPLETED
             ];
 
-            const isRestrictedTarget = targetStatuses.some(s => restrictedStatuses.includes(s));
-
-            if (isRestrictedTarget) {
-                const client = clients.find(c => c.id === draggedItem.clientId);
-                const app = client?.applications.find(a => a.id === draggedItem.appId);
-
-                if (app && !app.appointmentDate) {
-                    alert("Action refusée : Le client doit avoir un rendez-vous fixé avant de passer à cette étape.");
-                    setDraggedItem(null);
-                    return;
-                }
+            if (requiresAppointment.includes(newStatus) && !app.appointmentDate) {
+                alert(`❌ Action refusée !\n\nVous ne pouvez pas déplacer ce dossier vers "${newStatus}" sans avoir fixé un rendez-vous.\n\n✅ Veuillez d'abord fixer un rendez-vous pour ce client.`);
+                setDraggedItem(null);
+                return;
             }
 
-            const newStatus = targetStatuses[0];
             onUpdateStatus(draggedItem.clientId, draggedItem.appId, newStatus);
             setDraggedItem(null);
         }
@@ -160,7 +163,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ clients, onUpdateStatus, onSele
                             <div className={`bg-gradient-to-r ${col.gradient} p-4 relative overflow-hidden`}>
                                 <div className="absolute inset-0 bg-black/10"></div>
                                 <div className="relative z-10">
-                                    <div className="flex justify-between items-center mb-2">
+                                    <div className="flex justify-between items-center">
                                         <div className="flex items-center gap-2">
                                             <span className="text-2xl">{col.icon}</span>
                                             <h3 className="font-bold text-white text-lg">{col.title}</h3>
@@ -169,9 +172,6 @@ const KanbanView: React.FC<KanbanViewProps> = ({ clients, onUpdateStatus, onSele
                                             {items.length}
                                         </span>
                                     </div>
-                                    <p className="text-xs text-white/80 font-semibold">
-                                        Total: {formatCurrency(totalValue)}
-                                    </p>
                                 </div>
                             </div>
 

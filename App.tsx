@@ -83,14 +83,17 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (!firebaseLoading && firebaseSettings) {
-            setSettings({
+            const updatedSettings = {
                 ...DEFAULT_SETTINGS,
                 ...firebaseSettings,
                 visaTypes: Array.isArray(firebaseSettings.visaTypes) ? firebaseSettings.visaTypes : DEFAULT_SETTINGS.visaTypes,
                 destinations: Array.isArray(firebaseSettings.destinations) ? firebaseSettings.destinations : DEFAULT_SETTINGS.destinations,
                 menuOrder: Array.isArray(firebaseSettings.menuOrder) ? firebaseSettings.menuOrder : DEFAULT_SETTINGS.menuOrder,
                 appPassword: firebaseSettings.appPassword || DEFAULT_SETTINGS.appPassword
-            });
+            };
+            console.log("🔄 [App.tsx] Settings updated from Firebase:", updatedSettings);
+            console.log("🔄 [App.tsx] visaTypes from Firebase:", updatedSettings.visaTypes);
+            setSettings(updatedSettings);
         }
     }, [firebaseSettings, firebaseLoading]);
 
@@ -107,8 +110,12 @@ const App: React.FC = () => {
     }, [settings.darkMode]);
 
     const handleUpdateSettings = (newSettings: AppSettings) => {
+        console.log("🔧 [App.tsx] handleUpdateSettings called with:", newSettings);
+        console.log("🔧 [App.tsx] New visaTypes:", newSettings.visaTypes);
         setSettings(newSettings);
-        saveSettings(newSettings).catch(e => console.error("Error saving settings:", e));
+        saveSettings(newSettings)
+            .then(() => console.log("✅ [App.tsx] Settings saved to Firebase successfully"))
+            .catch(e => console.error("❌ [App.tsx] Error saving settings:", e));
     };
 
     const [isRadarActive, setIsRadarActive] = useState(false);
@@ -266,6 +273,64 @@ const App: React.FC = () => {
         }
     };
 
+    // Check for appointments that have reached their date and auto-update status
+    const checkAppointmentsForAutoUpdate = () => {
+        const now = new Date();
+        const today = now.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+
+        console.log('🔍 [App.tsx] Checking appointments for auto-update...', { today });
+
+        clients.forEach(client => {
+            client.applications.forEach(app => {
+                // Only process apps with APPOINTMENT_SET status and a valid appointment date
+                if (app.status === ApplicationStatus.APPOINTMENT_SET && app.appointmentDate && !app.archived) {
+                    // Parse appointment date (format: "YYYY-MM-DD HH:MM" or "DD/MM/YYYY HH:MM")
+                    const appointmentDateStr = app.appointmentDate.split(' ')[0]; // Get date part only
+
+                    // Check if appointment date matches today
+                    let isToday = false;
+
+                    // Handle different date formats
+                    if (appointmentDateStr.includes('-')) {
+                        // Format: YYYY-MM-DD
+                        isToday = appointmentDateStr === today;
+                    } else if (appointmentDateStr.includes('/')) {
+                        // Format: DD/MM/YYYY - convert to YYYY-MM-DD
+                        const [day, month, year] = appointmentDateStr.split('/');
+                        const normalizedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                        isToday = normalizedDate === today;
+                    }
+
+                    if (isToday) {
+                        console.log('📅 [App.tsx] Appointment date reached! Auto-updating status...', {
+                            clientId: client.id,
+                            clientName: client.fullName,
+                            appId: app.id,
+                            appointmentDate: app.appointmentDate,
+                            currentStatus: app.status
+                        });
+
+                        // Auto-update to SUBMITTED (En Traitement)
+                        handleUpdateStatus(client.id, app.id, ApplicationStatus.SUBMITTED);
+                    }
+                }
+            });
+        });
+    };
+
+    // Run auto-update check every minute
+    useEffect(() => {
+        // Initial check
+        checkAppointmentsForAutoUpdate();
+
+        // Set up interval to check every minute (60000ms)
+        const intervalId = setInterval(() => {
+            checkAppointmentsForAutoUpdate();
+        }, 60000);
+
+        return () => clearInterval(intervalId);
+    }, [clients]); // Re-run when clients change
+
     const handleSelectClient = (id: string) => {
         setSelectedClientId(id);
         setCurrentView('client-detail');
@@ -336,30 +401,79 @@ const App: React.FC = () => {
     };
 
     const handleUpdateApplication = (clientId: string, appId: string, data: Partial<Application>) => {
+        console.log('📝 [App.tsx] handleUpdateApplication called:', {
+            clientId,
+            appId,
+            data,
+            hasAppointmentDate: 'appointmentDate' in data,
+            appointmentDate: data.appointmentDate,
+            hasAppointmentConfig: !!data.appointmentConfig,
+            lastChecked: data.appointmentConfig?.lastChecked
+        });
+
         let updatedClient: Client | undefined;
-        setClients(prev => prev.map(client => {
-            if (client.id !== clientId) return client;
+        let clientFound = false;
 
-            if (data.appointmentConfig && data.appointmentConfig.lastChecked) {
-                setRadarAlertQueue(q => {
-                    const newQ = q.filter(alert => alert.id !== clientId);
-                    if (newQ.length === 0) stopAlerts();
-                    return newQ;
-                });
-            }
+        setClients(prev => {
+            const updated = prev.map(client => {
+                if (client.id !== clientId) return client;
 
-            updatedClient = {
-                ...client,
-                applications: client.applications.map(app => {
+                clientFound = true;
+
+                if (data.appointmentConfig && data.appointmentConfig.lastChecked) {
+                    setRadarAlertQueue(q => {
+                        const newQ = q.filter(alert => alert.id !== clientId);
+                        if (newQ.length === 0) stopAlerts();
+                        return newQ;
+                    });
+                }
+
+                const updatedApplications = client.applications.map(app => {
                     if (app.id !== appId) return app;
-                    return { ...app, ...data };
-                })
-            };
-            return updatedClient;
-        }));
-        if (updatedClient) {
-            updateClient(clientId, { applications: updatedClient.applications }).catch(e => console.error("Error updating client app:", e));
-        }
+                    const updatedApp = { ...app, ...data };
+
+                    // Log appointment date changes
+                    if ('appointmentDate' in data) {
+                        console.log('📅 [App.tsx] Appointment date change detected:', {
+                            appId: app.id,
+                            oldAppointmentDate: app.appointmentDate,
+                            newAppointmentDate: updatedApp.appointmentDate,
+                            isDeleting: data.appointmentDate === null || data.appointmentDate === undefined
+                        });
+                    }
+
+                    console.log('🔄 [App.tsx] Application updated locally:', {
+                        appId: app.id,
+                        oldLastChecked: app.appointmentConfig?.lastChecked,
+                        newLastChecked: updatedApp.appointmentConfig?.lastChecked
+                    });
+                    return updatedApp;
+                });
+
+                const newClient = {
+                    ...client,
+                    applications: updatedApplications
+                };
+
+                // Update Firebase immediately with the correct data
+                console.log('💾 [App.tsx] Saving to Firebase...', {
+                    clientId,
+                    applicationsCount: updatedApplications.length
+                });
+                updateClient(clientId, { applications: updatedApplications })
+                    .then(() => console.log('✅ [App.tsx] Firebase update successful'))
+                    .catch(e => console.error("❌ [App.tsx] Error updating client app:", e));
+
+                // Capture the updated client BEFORE returning
+                updatedClient = newClient;
+                return newClient;
+            });
+
+            return updated;
+        });
+
+        // Firebase update is now done inside the map function above
+        // This ensures we have the correct data at the right time
     };
 
     const handleDeleteApplication = (clientId: string, appId: string) => {
@@ -586,6 +700,7 @@ const App: React.FC = () => {
             case 'clients':
                 return (
                     <ClientList
+                        key={`clients-${settings.visaTypes.length}-${settings.destinations.length}`}
                         clients={clients}
                         onSelectClient={handleSelectClient}
                         onCreateClient={handleCreateClient}
@@ -602,6 +717,7 @@ const App: React.FC = () => {
             case 'archives':
                 return (
                     <ClientList
+                        key={`archives-${settings.visaTypes.length}-${settings.destinations.length}`}
                         clients={clients}
                         onSelectClient={handleSelectClient}
                         onCreateClient={handleCreateClient}
@@ -637,9 +753,10 @@ const App: React.FC = () => {
                 return <SettingsView settings={settings} onUpdateSettings={handleUpdateSettings} onResetAll={handleResetAllData} />;
             case 'client-detail':
                 const client = clients.find(c => c.id === selectedClientId);
-                if (!client) return <ClientList clients={clients} onSelectClient={handleSelectClient} onCreateClient={handleCreateClient} onDeleteClient={handleDeleteClient} onUpdateClient={handleUpdateClient} visaTypes={settings.visaTypes} destinations={settings.destinations} centers={settings.centers} />;
+                if (!client) return <ClientList key={`fallback-${settings.visaTypes.length}`} clients={clients} onSelectClient={handleSelectClient} onCreateClient={handleCreateClient} onDeleteClient={handleDeleteClient} onUpdateClient={handleUpdateClient} visaTypes={settings.visaTypes} destinations={settings.destinations} centers={settings.centers} />;
                 return (
                     <ClientDetail
+                        key={`detail-${client.id}-${settings.visaTypes.length}-${settings.destinations.length}`}
                         client={client}
                         onBack={handleBackToClients}
                         onUpdateStatus={handleUpdateStatus}
@@ -657,7 +774,7 @@ const App: React.FC = () => {
                     />
                 );
             case 'calendar':
-                return <CalendarView clients={clients} />;
+                return <CalendarView clients={clients} tasks={tasks} onSelectClient={handleSelectClient} />;
             default:
                 return <Dashboard clients={clients} onSelectClient={handleSelectClient} />;
         }

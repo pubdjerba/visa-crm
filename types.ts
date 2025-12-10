@@ -124,6 +124,7 @@ export interface TodoTask {
   text: string;
   completed: boolean;
   createdAt: string;
+  dueDate?: string; // Optional due date for the task
 }
 
 export interface LetterTemplate {

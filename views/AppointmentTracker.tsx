@@ -65,35 +65,56 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
         let checkDate: Date;
         const now = new Date();
 
-        const standardParse = new Date(lastCheckedStr);
+        console.log('🕐 [calculateTimeDisplay] Parsing:', lastCheckedStr);
 
-        if (!isNaN(standardParse.getTime())) {
-            checkDate = standardParse;
+        // Check if it's the custom format first: "5/12 9:10" (day/month hour:minute)
+        const customFormatRegex = /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2})$/;
+        const customMatch = lastCheckedStr.match(customFormatRegex);
+
+        if (customMatch) {
+            // Parse custom format
+            const [, d, m, h, min] = customMatch.map(Number);
+
+            console.log('📅 [calculateTimeDisplay] Custom format detected:', { d, m, h, min });
+
+            // Create date with current year
+            checkDate = new Date(now.getFullYear(), m - 1, d, h, min);
+
+            console.log('📅 [calculateTimeDisplay] Parsed date:', checkDate.toISOString());
+
+            // If the date is in the future, it might be from last year
+            if (checkDate > now) {
+                console.log('⚠️ [calculateTimeDisplay] Date is in future, adjusting to last year');
+                checkDate = new Date(now.getFullYear() - 1, m - 1, d, h, min);
+            }
         } else {
-            try {
-                const parts = lastCheckedStr.split(' ');
-                if (parts.length === 2) {
-                    const [d, m] = parts[0].split('/').map(Number);
-                    const [h, min] = parts[1].split(':').map(Number);
-                    checkDate = new Date(now.getFullYear(), m - 1, d, h, min);
-                } else {
-                    throw new Error("Invalid format");
-                }
-            } catch (e) {
+            // Try standard ISO format parsing
+            const standardParse = new Date(lastCheckedStr);
+
+            if (!isNaN(standardParse.getTime())) {
+                checkDate = standardParse;
+                console.log('📅 [calculateTimeDisplay] ISO format parsed:', checkDate.toISOString());
+            } else {
+                console.error('❌ [calculateTimeDisplay] Failed to parse date:', lastCheckedStr);
                 return { text: "Erreur date", minutes: 999999, colorClass: "bg-slate-100", textColor: "text-slate-500" };
             }
         }
 
         if (isNaN(checkDate.getTime())) {
+            console.error('❌ [calculateTimeDisplay] Invalid date after parsing');
             return { text: "Erreur date", minutes: 999999, colorClass: "bg-slate-100", textColor: "text-slate-500" };
         }
 
+        // If still in the future after adjustments, show "À l'instant"
         if (checkDate > now) {
+            console.log('⚠️ [calculateTimeDisplay] Date still in future, showing "À l\'instant"');
             return { text: "À l'instant", minutes: 0, colorClass: "bg-green-100 text-green-700 border-green-200", textColor: "text-green-600" };
         }
 
         const diffMs = now.getTime() - checkDate.getTime();
         const diffMin = Math.floor(diffMs / 60000);
+
+        console.log('⏱️ [calculateTimeDisplay] Time difference:', { diffMin, diffMs });
 
         let text = "";
         let colorClass = "";
@@ -121,6 +142,8 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
             colorClass = "bg-red-100 text-red-800 border-red-200";
             textColor = "text-red-600";
         }
+
+        console.log('✅ [calculateTimeDisplay] Result:', { text, minutes: diffMin });
 
         return { text, minutes: diffMin, colorClass, textColor };
     };
@@ -230,19 +253,33 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
 
     const handleMarkAsChecked = (clientId: string, app: Application) => {
         const now = new Date();
-        const formatted = `${now.getDate()}/${now.getMonth() + 1} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+        // Use ISO format for reliable parsing
+        const formatted = now.toISOString();
         const currentConfig = app.appointmentConfig || {};
         const currentLog = currentConfig.checkLog || [];
 
-        const newLog = [formatted, ...currentLog].slice(0, 50);
+        // For the log display, use a readable format
+        const readableFormat = `${now.getDate()}/${now.getMonth() + 1} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const newLog = [readableFormat, ...currentLog].slice(0, 50);
+
+        console.log('🔍 [AppointmentTracker] Marking as checked:', {
+            clientId,
+            appId: app.id,
+            formatted,
+            readableFormat,
+            currentConfig,
+            newLog
+        });
 
         onUpdateApplication(clientId, app.id, {
             appointmentConfig: {
                 ...currentConfig,
-                lastChecked: formatted,
+                lastChecked: formatted, // Store ISO format for accurate parsing
                 checkLog: newLog
             }
         });
+
+        console.log('✅ [AppointmentTracker] Update sent to parent component');
     };
 
     const openValidationModal = (clientId: string, appId: string) => {

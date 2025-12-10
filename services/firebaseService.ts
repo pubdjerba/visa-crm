@@ -60,9 +60,18 @@ export const getClient = async (clientId: string): Promise<Client | null> => {
 
 export const updateClient = async (clientId: string, data: Partial<Client>): Promise<void> => {
     try {
+        console.log('🔥 [firebaseService] updateClient called:', {
+            clientId,
+            dataKeys: Object.keys(data),
+            hasApplications: !!data.applications,
+            applicationsCount: data.applications?.length
+        });
+
         await updateDoc(doc(db, COLLECTIONS.CLIENTS, clientId), data as any);
+
+        console.log('✅ [firebaseService] updateDoc completed successfully');
     } catch (error) {
-        console.error("Error updating client:", error);
+        console.error("❌ [firebaseService] Error updating client:", error);
         throw error;
     }
 };

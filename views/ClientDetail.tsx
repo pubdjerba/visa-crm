@@ -130,11 +130,21 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
     const [showDocGenModal, setShowDocGenModal] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<LetterTemplate | null>(null);
     const [generatedContent, setGeneratedContent] = useState('');
+    const [newNote, setNewNote] = useState('');
 
     // Refusal Modal
     const [showRefusalModal, setShowRefusalModal] = useState(false);
     const [refusalReason, setRefusalReason] = useState('');
     const [isGeneratingAppeal, setIsGeneratingAppeal] = useState(false);
+
+    // Appointment Modal
+    const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+    const [appointmentFormData, setAppointmentFormData] = useState({
+        appId: '',
+        date: '',
+        hour: '09',
+        minute: '00'
+    });
 
     const [notes, setNotes] = useState(client.notes || '');
     const [isSavingNotes, setIsSavingNotes] = useState(false);
@@ -229,6 +239,23 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
         setIsSavingNotes(true);
         onUpdateClient(client.id, { notes });
         setTimeout(() => setIsSavingNotes(false), 500);
+    };
+
+    const handleAddNote = () => {
+        if (!newNote.trim()) return;
+
+        const updatedHistory = [
+            {
+                id: `note_${Date.now()}`,
+                date: new Date().toISOString().split('T')[0],
+                type: 'system' as const,
+                notes: newNote.trim()
+            },
+            ...client.history
+        ];
+
+        onUpdateClient(client.id, { history: updatedHistory });
+        setNewNote('');
     };
 
     const openFinanceModal = () => {
@@ -387,6 +414,34 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
             setSelectedTemplate(tpl);
             generateContent(tpl);
         }
+    };
+
+    const openAppointmentModal = (appId: string) => {
+        const now = new Date();
+        setAppointmentFormData({
+            appId,
+            date: now.toISOString().split('T')[0],
+            hour: '09',
+            minute: '00'
+        });
+        setShowAppointmentModal(true);
+    };
+
+    const handleConfirmAppointment = (e: React.FormEvent) => {
+        e.preventDefault();
+        const { appId, date, hour, minute } = appointmentFormData;
+        const fullDate = `${date} ${hour}:${minute}`;
+
+        // Update appointment date and status
+        onUpdateApplication(client.id, appId, {
+            appointmentDate: fullDate,
+            status: ApplicationStatus.APPOINTMENT_SET
+        });
+
+        // Also trigger status update for opening log
+        onUpdateStatus(client.id, appId, ApplicationStatus.APPOINTMENT_SET);
+
+        setShowAppointmentModal(false);
     };
 
     const getTimelineEvents = () => {
@@ -583,7 +638,7 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
                                                         <div className="flex items-center gap-2 mb-2">
                                                             <GlobeIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                                             <span className="font-bold text-2xl text-slate-800 dark:text-white">{app.destination}</span>
-                                                            <span className="text-xs px-2.5 py-1 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 rounded-full text-slate-700 dark:text-slate-300 font-medium">{app.visaType}</span>
+                                                            <span className="text-sm px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full text-white font-bold shadow-md">{app.visaType}</span>
                                                             {selectedAppId === app.id && (
                                                                 <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full shadow-sm">
                                                                     ACTIF
@@ -603,13 +658,13 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
 
                                                     <div className="flex flex-col items-end gap-2">
                                                         <span className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg ${app.status === ApplicationStatus.APPOINTMENT_SET ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' :
-                                                                app.status === ApplicationStatus.WAITING_APPOINTMENT ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white' :
-                                                                    app.status === ApplicationStatus.PROCESSING ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' :
-                                                                        app.status === ApplicationStatus.SUBMITTED ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' :
-                                                                            app.status === ApplicationStatus.READY_PICKUP ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' :
-                                                                                app.status === ApplicationStatus.COMPLETED ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white' :
-                                                                                    app.status === ApplicationStatus.REFUSED ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white' :
-                                                                                        'bg-gradient-to-r from-slate-500 to-gray-500 text-white'
+                                                            app.status === ApplicationStatus.WAITING_APPOINTMENT ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white' :
+                                                                app.status === ApplicationStatus.PROCESSING ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' :
+                                                                    app.status === ApplicationStatus.SUBMITTED ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' :
+                                                                        app.status === ApplicationStatus.READY_PICKUP ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' :
+                                                                            app.status === ApplicationStatus.COMPLETED ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white' :
+                                                                                app.status === ApplicationStatus.REFUSED ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white' :
+                                                                                    'bg-gradient-to-r from-slate-500 to-gray-500 text-white'
                                                             }`}>
                                                             {app.status}
                                                         </span>
@@ -778,6 +833,64 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
                                                 </button>
                                                 <button
                                                     type="button"
+                                                    onClick={(e) => { e.stopPropagation(); openAppointmentModal(app.id); }}
+                                                    className="px-4 py-2 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-md transition flex items-center gap-2 shadow-sm"
+                                                >
+                                                    <CalendarIcon className="w-3 h-3" /> Fixer RDV
+                                                </button>
+                                                {app.appointmentDate && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+
+                                                            console.log('🔴 [DEBUG] Button clicked!', { clientId: client.id, appId: app.id });
+
+                                                            const confirmed = window.confirm('Supprimer ce rendez-vous ?');
+                                                            console.log('🔴 [DEBUG] Confirmed:', confirmed);
+
+                                                            if (confirmed) {
+                                                                try {
+                                                                    console.log('🗑️ [ClientDetail] Deleting appointment:', {
+                                                                        clientId: client.id,
+                                                                        appId: app.id,
+                                                                        oldStatus: app.status,
+                                                                        oldAppointmentDate: app.appointmentDate
+                                                                    });
+
+                                                                    // Single combined update: remove date and reset status
+                                                                    onUpdateApplication(client.id, app.id, {
+                                                                        appointmentDate: null as any,
+                                                                        status: ApplicationStatus.WAITING_APPOINTMENT
+                                                                    });
+
+                                                                    // Add history entry
+                                                                    const newHistoryEntry = {
+                                                                        id: `hist_${Date.now()}`,
+                                                                        date: new Date().toISOString().split('T')[0],
+                                                                        type: 'system' as const,
+                                                                        notes: `Rendez-vous supprimé - Retour au statut: ${ApplicationStatus.WAITING_APPOINTMENT}`
+                                                                    };
+
+                                                                    onUpdateClient(client.id, {
+                                                                        history: [newHistoryEntry, ...client.history]
+                                                                    });
+
+                                                                    console.log('✅ [ClientDetail] Appointment deletion completed');
+                                                                } catch (error) {
+                                                                    console.error('❌ [ClientDetail] Error deleting appointment:', error);
+                                                                    alert('Erreur lors de la suppression du rendez-vous: ' + error);
+                                                                }
+                                                            }
+                                                        }}
+                                                        className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-md transition flex items-center gap-2 shadow-sm"
+                                                    >
+                                                        <TrashIcon className="w-3 h-3" /> Supprimer RDV
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
                                                     onClick={(e) => { e.stopPropagation(); openEditAppModal(app); }}
                                                     className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition flex items-center gap-2 shadow-sm"
                                                 >
@@ -801,7 +914,176 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
                                         </div>
                                     );
                                 })}
-                                {/* ... */}
+                            </div>
+                        )}
+
+                        {/* Documents Tab */}
+                        {activeTab === 'docs' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                        <FileTextIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                        Documents
+                                    </h3>
+                                </div>
+
+                                {client.applications.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <FileTextIcon className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                                        <p className="text-slate-500 dark:text-slate-400">Aucun dossier créé</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {client.applications.map(app => (
+                                            <div key={app.id} className="bg-slate-50 dark:bg-slate-900/30 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                                                            <GlobeIcon className="w-5 h-5 text-white" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-bold text-slate-800 dark:text-white">{app.destination}</h4>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400">{app.visaType}</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-xs px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full font-medium">
+                                                        {app.documents?.length || 0} document(s)
+                                                    </span>
+                                                </div>
+
+                                                {app.documents && app.documents.length > 0 ? (
+                                                    <div className="space-y-2">
+                                                        {app.documents.map(doc => (
+                                                            <div key={doc.id} className="bg-white dark:bg-slate-800 rounded-lg p-3 flex items-center justify-between hover:shadow-md transition-shadow">
+                                                                <div className="flex items-center gap-3 flex-1">
+                                                                    <div className="w-8 h-8 bg-blue-50 dark:bg-blue-900/20 rounded flex items-center justify-center">
+                                                                        <FileTextIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="font-medium text-sm text-slate-800 dark:text-white truncate">{doc.name}</p>
+                                                                        <p className="text-xs text-slate-500 dark:text-slate-400">{doc.type} • {doc.uploadDate}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    {doc.status === 'valid' && (
+                                                                        <span className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full font-medium">
+                                                                            ✓ Valide
+                                                                        </span>
+                                                                    )}
+                                                                    <button className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition">
+                                                                        <DownloadIcon className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-6 text-slate-400 dark:text-slate-500 text-sm">
+                                                        Aucun document pour ce dossier
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Communication Tab */}
+                        {activeTab === 'history' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                        <MessageCircleIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                        Historique de Communication
+                                    </h3>
+                                </div>
+
+                                {/* Add Note Form */}
+                                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-xl p-4 border border-blue-200 dark:border-blue-900/30">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Ajouter une note
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <textarea
+                                            className="flex-1 p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                            rows={3}
+                                            placeholder="Écrivez une note sur cette interaction..."
+                                            value={newNote}
+                                            onChange={(e) => setNewNote(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex justify-end mt-2">
+                                        <button
+                                            onClick={handleAddNote}
+                                            disabled={!newNote.trim()}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition flex items-center gap-2"
+                                        >
+                                            <PlusIcon className="w-4 h-4" />
+                                            Ajouter
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Timeline */}
+                                <div className="space-y-4 mt-6">
+                                    {client.history.length === 0 ? (
+                                        <div className="text-center py-12">
+                                            <MessageCircleIcon className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                                            <p className="text-slate-500 dark:text-slate-400">Aucun historique de communication</p>
+                                        </div>
+                                    ) : (
+                                        client.history.map((interaction, index) => {
+                                            const getIcon = () => {
+                                                switch (interaction.type) {
+                                                    case 'email': return '✉️';
+                                                    case 'call': return '📞';
+                                                    case 'whatsapp': return '💬';
+                                                    case 'meeting': return '🤝';
+                                                    case 'system': return '📝';
+                                                    default: return '📋';
+                                                }
+                                            };
+
+                                            const getColor = () => {
+                                                switch (interaction.type) {
+                                                    case 'email': return 'from-blue-500 to-cyan-500';
+                                                    case 'call': return 'from-green-500 to-emerald-500';
+                                                    case 'whatsapp': return 'from-green-600 to-teal-600';
+                                                    case 'meeting': return 'from-purple-500 to-pink-500';
+                                                    case 'system': return 'from-slate-500 to-slate-600';
+                                                    default: return 'from-slate-400 to-slate-500';
+                                                }
+                                            };
+
+                                            return (
+                                                <div key={interaction.id} className="flex gap-4 relative">
+                                                    {index < client.history.length - 1 && (
+                                                        <div className="absolute left-[19px] top-10 bottom-[-16px] w-0.5 bg-slate-200 dark:bg-slate-700"></div>
+                                                    )}
+                                                    <div className={`relative z-10 w-10 h-10 rounded-full bg-gradient-to-br ${getColor()} flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                                                        <span className="text-lg">{getIcon()}</span>
+                                                    </div>
+                                                    <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div>
+                                                                <span className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded font-medium">
+                                                                    {interaction.type}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
+                                                                {interaction.date}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                                                            {interaction.notes}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         )}
                         {/* ... Other tabs ... */}
@@ -1018,6 +1300,81 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
                                 <PrinterIcon className="w-4 h-4" /> Imprimer / PDF
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Appointment Modal */}
+            {showAppointmentModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md animate-scale-in">
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <CalendarIcon className="w-6 h-6 text-green-600" />
+                                Fixer un Rendez-vous
+                            </h2>
+                        </div>
+                        <form onSubmit={handleConfirmAppointment} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    Date du rendez-vous
+                                </label>
+                                <input
+                                    type="date"
+                                    required
+                                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    value={appointmentFormData.date}
+                                    onChange={(e) => setAppointmentFormData({ ...appointmentFormData, date: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Heure
+                                    </label>
+                                    <select
+                                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        value={appointmentFormData.hour}
+                                        onChange={(e) => setAppointmentFormData({ ...appointmentFormData, hour: e.target.value })}
+                                    >
+                                        {Array.from({ length: 16 }, (_, i) => i + 7).map(h => (
+                                            <option key={h} value={h.toString().padStart(2, '0')}>
+                                                {h.toString().padStart(2, '0')}h
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Minutes
+                                    </label>
+                                    <select
+                                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        value={appointmentFormData.minute}
+                                        onChange={(e) => setAppointmentFormData({ ...appointmentFormData, minute: e.target.value })}
+                                    >
+                                        {['00', '15', '30', '45'].map(m => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAppointmentModal(false)}
+                                    className="flex-1 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition shadow-sm"
+                                >
+                                    Confirmer
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
