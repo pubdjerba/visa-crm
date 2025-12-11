@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Client, ApplicationStatus, Application, PriorityMode, OpeningLog } from '../types';
-import { BotIcon, CopyIcon, EyeIcon, MagicWandIcon, SparklesIcon, BoltIcon, TrendingUpIcon, MegaphoneIcon, ExternalLinkIcon, GridIcon, ListIcon, ClockIcon, FileTextIcon, PrinterIcon, DownloadIcon, CheckCircleIcon, CalendarIcon } from '../components/Icons';
+import { BotIcon, CopyIcon, EyeIcon, MagicWandIcon, SparklesIcon, BoltIcon, TrendingUpIcon, MegaphoneIcon, ExternalLinkIcon, GridIcon, ListIcon, ClockIcon, FileTextIcon, PrinterIcon, DownloadIcon, CheckCircleIcon, CalendarIcon, TrashIcon, ArchiveIcon, SearchIcon } from '../components/Icons';
 import { ALERT_SOUND_B64, CHECK_FREQUENCIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -178,9 +178,9 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
     };
 
     const waitingClients = clients.filter(c =>
-        c.applications.some(app => app.status === ApplicationStatus.WAITING_APPOINTMENT)
+        c.applications.some(app => app.status === ApplicationStatus.WAITING_APPOINTMENT && !app.archived)
     ).map(c => {
-        const app = c.applications.find(a => a.status === ApplicationStatus.WAITING_APPOINTMENT)!;
+        const app = c.applications.find(a => a.status === ApplicationStatus.WAITING_APPOINTMENT && !a.archived)!;
         const { score, historyMatch } = calculateUrgencyAndProbability(c, app);
 
         const timeData = calculateTimeDisplay(app.appointmentConfig?.lastChecked);
@@ -457,7 +457,7 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
         <div className="p-6 h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
 
             {/* Header */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 animate-fade-in">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
                 <div>
                     <h1 className="text-3xl font-bold flex items-center gap-3 text-slate-900 dark:text-white mb-1">
                         <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/30">
@@ -497,44 +497,48 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
 
             {/* COCKPIT MODE */}
             {cockpitMode && focusedClient && (
-                <div className="flex-grow flex flex-col md:flex-row gap-6 overflow-hidden animate-fade-in">
+                <div className="flex-grow flex flex-col md:flex-row gap-6 overflow-hidden">
                     {/* Sidebar Queue */}
                     <div className="w-full md:w-72 card overflow-hidden flex flex-col flex-shrink-0">
                         <div className="p-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 border-b border-slate-200 dark:border-slate-700 font-bold text-xs text-slate-600 dark:text-slate-300 uppercase tracking-wide">
                             File d'attente Prioritaire
                         </div>
-                        <div className="flex-grow overflow-y-auto scrollbar-thin">
-                            {waitingClients.map((client, idx) => (
-                                <div
-                                    key={client.id}
-                                    onClick={() => setCockpitIndex(idx)}
-                                    className={`p-3 border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-all duration-300 ${idx === cockpitIndex
-                                        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-l-4 border-l-blue-600 shadow-sm'
-                                        : 'hover:bg-slate-50 dark:hover:bg-slate-700'
-                                        }`}
-                                    style={{ animationDelay: `${idx * 30}ms` }}
-                                >
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className={`font-bold text-sm truncate ${idx === cockpitIndex
-                                            ? 'text-blue-700 dark:text-blue-300'
-                                            : 'text-slate-700 dark:text-slate-200'
-                                            }`}>
-                                            {client.fullName}
-                                        </span>
-                                        {client.historyMatch && (
-                                            <span className="text-lg animate-bounce-subtle">🔥</span>
-                                        )}
+                        <div className="flex-grow overflow-y-auto scrollbar-thin py-2">
+                            {waitingClients.map((c, idx) => {
+                                const app = c.activeApp;
+                                const timeLeft = c.timeData.text;
+                                const urgencyColor = c.timeData.colorClass;
+
+                                return (
+                                    <div
+                                        key={c.id}
+                                        onClick={() => setCockpitIndex(idx)}
+                                        className={`p-3 rounded-xl mx-2 my-1 cursor-pointer ${idx === cockpitIndex
+                                            ? 'bg-blue-600 text-white'
+                                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
+                                            }`}
+                                    >
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className={`font-bold text-sm truncate max-w-[140px] ${idx === cockpitIndex ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>
+                                                    {c.fullName}
+                                                </div>
+                                                <div className={`text-xs flex items-center gap-1 mt-1 ${idx === cockpitIndex ? 'text-blue-100' : 'text-slate-500'}`}>
+                                                    <span>{app.destination}</span>
+                                                    <span>•</span>
+                                                    <span>{app.visaType}</span>
+                                                </div>
+                                            </div>
+                                            <div className={`text-xs font-mono px-2 py-1 rounded-full ${idx === cockpitIndex
+                                                ? 'bg-white/20 text-white backdrop-blur-sm'
+                                                : urgencyColor
+                                                }`}>
+                                                {timeLeft}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between text-xs items-center">
-                                        <span className="text-slate-500 dark:text-slate-400 truncate max-w-[100px]">
-                                            {client.activeApp.destination}
-                                        </span>
-                                        <span className={`px-2 py-0.5 rounded-full font-bold text-xs ${client.timeData.colorClass}`}>
-                                            {client.timeData.text}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -651,7 +655,7 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="mt-auto grid grid-cols-4 gap-4">
+                        <div className="mt-auto grid grid-cols-3 gap-4">
                             <button
                                 onClick={() => {
                                     const centerConfig = centers.find(c => c.name === focusedClient.activeApp.center);
@@ -661,46 +665,32 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                                 }}
                                 className="col-span-1 btn-primary py-5 rounded-xl text-base shadow-xl flex flex-col items-center justify-center gap-2 active:scale-95 hover:shadow-2xl"
                             >
-                                <ExternalLinkIcon className="w-6 h-6" />
-                                <span className="text-sm">OUVRIR</span>
-                                <span className="text-xs opacity-75">(Espace)</span>
-                            </button>
-
-                            <button
-                                onClick={handleNextClient}
-                                className="col-span-1 btn-secondary py-5 rounded-xl text-base shadow-md flex flex-col items-center justify-center gap-2 active:scale-95"
-                            >
-                                <BoltIcon className="w-6 h-6" />
-                                <span className="text-sm">SUIVANT</span>
-                                <span className="text-xs opacity-75">(N)</span>
+                                <SearchIcon className="w-6 h-6" />
+                                <span className="text-sm">CHERCHER</span>
+                                <span className="text-xs opacity-75">(Portail)</span>
                             </button>
 
                             <button
                                 onClick={() => openValidationModal(focusedClient.id, focusedClient.activeApp.id)}
-                                className="col-span-2 btn-success py-5 rounded-xl text-base shadow-xl flex flex-col items-center justify-center gap-2 active:scale-95 hover:shadow-2xl"
+                                className="col-span-1 btn-success py-5 rounded-xl text-base shadow-xl flex flex-col items-center justify-center gap-2 active:scale-95 hover:shadow-2xl"
                             >
                                 <CalendarIcon className="w-6 h-6" />
-                                <span className="text-sm font-bold">RDV TROUVÉ !</span>
-                                <span className="text-xs opacity-90">(Valider le rendez-vous)</span>
+                                <span className="text-sm font-bold">RDV FIXÉ</span>
+                                <span className="text-xs opacity-90">(Valider)</span>
                             </button>
-                        </div>
 
-                        {/* Keyboard Shortcuts */}
-                        <div className="mt-6 text-center">
-                            <div className="inline-flex items-center gap-6 text-xs text-slate-400 dark:text-slate-500 font-mono bg-slate-50 dark:bg-slate-800/50 px-6 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                                <span className="flex items-center gap-1">
-                                    <kbd className="px-2 py-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded shadow-sm font-bold">Espace</kbd> Ouvrir
-                                </span>
-                                <span className="flex items-center gap-1">
-                                    <kbd className="px-2 py-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded shadow-sm font-bold">C</kbd> Copier Login
-                                </span>
-                                <span className="flex items-center gap-1">
-                                    <kbd className="px-2 py-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded shadow-sm font-bold">V</kbd> Copier Mdp
-                                </span>
-                                <span className="flex items-center gap-1">
-                                    <kbd className="px-2 py-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded shadow-sm font-bold">N</kbd> Suivant
-                                </span>
-                            </div>
+                            <button
+                                onClick={() => {
+                                    if (window.confirm("Voulez-vous vraiment archiver ce dossier ?")) {
+                                        onUpdateApplication(focusedClient.id, focusedClient.activeApp.id, { archived: true });
+                                    }
+                                }}
+                                className="col-span-1 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 py-5 rounded-xl text-base shadow-sm flex flex-col items-center justify-center gap-2 active:scale-95 transition-all"
+                            >
+                                <ArchiveIcon className="w-6 h-6" />
+                                <span className="text-sm">ARCHIVER</span>
+                                <span className="text-xs opacity-75">(Clôturer)</span>
+                            </button>
                         </div>
                     </div>
                 </div>
