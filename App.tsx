@@ -626,12 +626,16 @@ const App: React.FC = () => {
         deleteResource(id).catch(e => console.error("Error deleting resource:", e));
     };
 
-    const handleAddTask = (text: string) => {
+    const handleAddTask = (text: string, dueDate?: string, priority?: 'high' | 'medium' | 'low', category?: 'call' | 'email' | 'paperwork' | 'meeting' | 'other', clientId?: string) => {
         const newTask: TodoTask = {
             id: `task_${Date.now()}`,
             text,
             completed: false,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            dueDate,
+            priority,
+            category,
+            clientId
         };
         setTasks(prev => [newTask, ...prev]);
         saveTask(newTask).catch(e => console.error("Error saving task:", e));
@@ -746,7 +750,7 @@ const App: React.FC = () => {
             case 'resources':
                 return <ResourcesView resources={resources} onAddResource={handleAddResource} onUpdateResource={handleUpdateResource} onDeleteResource={handleDeleteResource} />;
             case 'tasks':
-                return <TasksView tasks={tasks} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} />;
+                return <TasksView tasks={tasks} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} clients={clients} />;
             case 'templates':
                 return <TemplatesView templates={templates} onAddTemplate={handleAddTemplate} onUpdateTemplate={handleUpdateTemplate} onDeleteTemplate={handleDeleteTemplate} />;
             case 'settings':

@@ -125,6 +125,9 @@ export interface TodoTask {
   completed: boolean;
   createdAt: string;
   dueDate?: string; // Optional due date for the task
+  priority?: 'high' | 'medium' | 'low';
+  category?: 'call' | 'email' | 'paperwork' | 'meeting' | 'other';
+  clientId?: string;
 }
 
 export interface LetterTemplate {

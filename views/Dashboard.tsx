@@ -19,7 +19,8 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                 clientName: client.fullName,
                 clientAvatar: client.avatarUrl,
                 clientId: client.id,
-                clientPhone: client.phone
+                clientPhone: client.phone,
+                clientNotes: client.notes // Add notes here
             }))
     ).sort((a, b) => {
         // Sort by urgency/status approximately
@@ -171,6 +172,15 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                 </span>
                             </div>
 
+                            {/* Mobile Notes Display */}
+                            {app.clientNotes && (
+                                <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-3 rounded-r-md">
+                                    <p className="text-xs text-yellow-800 dark:text-yellow-200 italic line-clamp-2">
+                                        "{app.clientNotes}"
+                                    </p>
+                                </div>
+                            )}
+
                             <div className="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-2">
                                 <div className="flex justify-between items-center">
                                     <div>
@@ -199,9 +209,11 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                             </div>
                         </div>
                         {/* Mobile separator line strictly as requested */}
-                        {index < activeApplications.length - 1 && (
-                            <div className="h-px bg-slate-200 dark:bg-slate-700 my-4 mx-2" />
-                        )}
+                        {
+                            index < activeApplications.length - 1 && (
+                                <div className="h-px bg-slate-200 dark:bg-slate-700 my-4 mx-2" />
+                            )
+                        }
                     </div>
                 ))}
                 {activeApplications.length === 0 && (
@@ -244,6 +256,13 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                                             <div>
                                                 <p className="font-bold text-slate-900 dark:text-white">{app.clientName}</p>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{app.clientPhone}</p>
+                                                {app.clientNotes && (
+                                                    <div className="mt-1.5 flex items-start gap-1 p-1.5 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800 max-w-[200px]">
+                                                        <span className="text-[10px] text-yellow-700 dark:text-yellow-300 italic line-clamp-2 leading-tight">
+                                                            {app.clientNotes}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </td>
@@ -312,7 +331,7 @@ const Dashboard: React.FC<DashboardProps> = ({ clients, onSelectClient }) => {
                     </table>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

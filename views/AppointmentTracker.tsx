@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Client, ApplicationStatus, Application, PriorityMode, OpeningLog } from '../types';
-import { BotIcon, CopyIcon, EyeIcon, MagicWandIcon, SparklesIcon, BoltIcon, TrendingUpIcon, MegaphoneIcon, ExternalLinkIcon, GridIcon, ListIcon, ClockIcon, FileTextIcon, PrinterIcon, DownloadIcon, CheckCircleIcon, CalendarIcon, TrashIcon, ArchiveIcon, SearchIcon } from '../components/Icons';
+import { BotIcon, CopyIcon, EyeIcon, MagicWandIcon, SparklesIcon, BoltIcon, TrendingUpIcon, MegaphoneIcon, ExternalLinkIcon, GridIcon, ListIcon, ClockIcon, FileTextIcon, PrinterIcon, DownloadIcon, CheckCircleIcon, CalendarIcon, TrashIcon, ArchiveIcon, SearchIcon, BellIcon } from '../components/Icons';
 import { ALERT_SOUND_B64, CHECK_FREQUENCIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -42,14 +42,144 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
     const [cockpitIndex, setCockpitIndex] = useState(0);
     const [cockpitMode, setCockpitMode] = useState(true); // Default to Cockpit mode
 
-    // --- RADAR LOGIC ---
-    const [isRadarActive, setIsRadarActive] = useState(false);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // --- AUDIO CONTEXT LOGIC (OSCILLATOR) ---
+    const playAlarmSound = () => {
+        try {
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContext) {
+                console.error("Web Audio API not supported");
+                return;
+            }
+
+            const ctx = new AudioContext();
+
+            const playBeep = (startTime: number) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, startTime); // A4
+                osc.frequency.exponentialRampToValueAtTime(880, startTime + 0.1);
+
+                gain.gain.setValueAtTime(0.1, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.5);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(startTime);
+                osc.stop(startTime + 0.5);
+            };
+
+            const now = ctx.currentTime;
+            playBeep(now);
+            playBeep(now + 0.6);
+            playBeep(now + 1.2);
+
+        } catch (e) {
+            console.error("AudioContext Error:", e);
+        }
+    };
+
+    // --- ALARM LOGIC ---
+    const [showAlarmModal, setShowAlarmModal] = useState(false);
+    const [alarms, setAlarms] = useState<string[]>(() => {
+        const saved = localStorage.getItem('appointmentAlarms');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [newAlarmTime, setNewAlarmTime] = useState('');
+    const [lastTriggeredTime, setLastTriggeredTime] = useState<string | null>(null);
+    const [activeAlarm, setActiveAlarm] = useState<{ time: string, active: boolean } | null>(null);
 
     useEffect(() => {
-        audioRef.current = new Audio(ALERT_SOUND_B64);
-        audioRef.current.volume = 0.5;
-    }, []);
+        localStorage.setItem('appointmentAlarms', JSON.stringify(alarms));
+    }, [alarms]);
+
+    // Request on mount if needed, but rely on button
+    useEffect(() => {
+        if (alarms.length > 0 && Notification.permission === 'default') {
+            // Optional: don't force it, wait for user
+        }
+    }, [alarms]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = new Date();
+            const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+            if (alarms.includes(currentTime) && currentTime !== lastTriggeredTime) {
+                triggerAlarm(currentTime);
+                setLastTriggeredTime(currentTime);
+            }
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(interval);
+    }, [alarms, lastTriggeredTime]);
+
+    const diagnoseNotifications = async () => {
+        let msg = "Diagnostic Notifications:\n";
+        msg += `- Supporté: ${"Notification" in window ? "OUI" : "NON"}\n`;
+        msg += `- Permission actuelle: ${Notification.permission}\n`;
+        msg += `- Secure Context (HTTPS/Localhost): ${window.isSecureContext ? "OUI" : "NON"}\n`;
+
+        if (Notification.permission !== 'granted') {
+            msg += "\nTentative de demande de permission...";
+            const result = await Notification.requestPermission();
+            msg += `\nNouveau statut: ${result}`;
+        }
+
+        if (Notification.permission === 'granted') {
+            try {
+                new Notification("Test Diagnostic", { body: "Ceci est un test." });
+                msg += "\nNotification envoyée (vérifiez votre centre de notifications Windows).";
+            } catch (e) {
+                msg += `\nErreur d'envoi: ${e}`;
+            }
+        }
+
+        alert(msg);
+    };
+
+    const triggerAlarm = (time: string) => {
+        console.log(`⏰ Triggering Alarm for ${time}`);
+
+        // Remove the alarm from the list (Auto-delete)
+        setAlarms(prev => prev.filter(t => t !== time));
+
+        // Play Sound (Oscillator)
+        playAlarmSound();
+
+        // Show In-App Notification
+        setActiveAlarm({ time, active: true });
+        setTimeout(() => setActiveAlarm(null), 10000); // Hide after 10s automatic
+
+        // System Notification
+        if ("Notification" in window && Notification.permission === 'granted') {
+            try {
+                const n = new Notification("⏰ Rappel de Recherche RDV", {
+                    body: `Il est ${time}, c'est l'heure de vérifier les rendez-vous !`,
+                    silent: false
+                });
+                n.onclick = () => { window.focus(); n.close(); };
+            } catch (e) {
+                console.error("❌ Exception creating notification:", e);
+            }
+        }
+    };
+
+    const addAlarm = () => {
+        if (!newAlarmTime) return;
+        if (!alarms.includes(newAlarmTime)) {
+            setAlarms([...alarms, newAlarmTime].sort());
+        }
+        setNewAlarmTime('');
+    };
+
+    const removeAlarm = (time: string) => {
+        setAlarms(alarms.filter(a => a !== time));
+    };
+
 
     // --- TIME FORMATTING HELPER ---
     const calculateTimeDisplay = (lastCheckedStr?: string) => {
@@ -65,56 +195,36 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
         let checkDate: Date;
         const now = new Date();
 
-        console.log('🕐 [calculateTimeDisplay] Parsing:', lastCheckedStr);
-
         // Check if it's the custom format first: "5/12 9:10" (day/month hour:minute)
         const customFormatRegex = /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2})$/;
         const customMatch = lastCheckedStr.match(customFormatRegex);
 
         if (customMatch) {
-            // Parse custom format
             const [, d, m, h, min] = customMatch.map(Number);
-
-            console.log('📅 [calculateTimeDisplay] Custom format detected:', { d, m, h, min });
-
-            // Create date with current year
             checkDate = new Date(now.getFullYear(), m - 1, d, h, min);
 
-            console.log('📅 [calculateTimeDisplay] Parsed date:', checkDate.toISOString());
-
-            // If the date is in the future, it might be from last year
             if (checkDate > now) {
-                console.log('⚠️ [calculateTimeDisplay] Date is in future, adjusting to last year');
                 checkDate = new Date(now.getFullYear() - 1, m - 1, d, h, min);
             }
         } else {
-            // Try standard ISO format parsing
             const standardParse = new Date(lastCheckedStr);
-
             if (!isNaN(standardParse.getTime())) {
                 checkDate = standardParse;
-                console.log('📅 [calculateTimeDisplay] ISO format parsed:', checkDate.toISOString());
             } else {
-                console.error('❌ [calculateTimeDisplay] Failed to parse date:', lastCheckedStr);
                 return { text: "Erreur date", minutes: 999999, colorClass: "bg-slate-100", textColor: "text-slate-500" };
             }
         }
 
         if (isNaN(checkDate.getTime())) {
-            console.error('❌ [calculateTimeDisplay] Invalid date after parsing');
             return { text: "Erreur date", minutes: 999999, colorClass: "bg-slate-100", textColor: "text-slate-500" };
         }
 
-        // If still in the future after adjustments, show "À l'instant"
         if (checkDate > now) {
-            console.log('⚠️ [calculateTimeDisplay] Date still in future, showing "À l\'instant"');
             return { text: "À l'instant", minutes: 0, colorClass: "bg-green-100 text-green-700 border-green-200", textColor: "text-green-600" };
         }
 
         const diffMs = now.getTime() - checkDate.getTime();
         const diffMin = Math.floor(diffMs / 60000);
-
-        console.log('⏱️ [calculateTimeDisplay] Time difference:', { diffMin, diffMs });
 
         let text = "";
         let colorClass = "";
@@ -142,8 +252,6 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
             colorClass = "bg-red-100 text-red-800 border-red-200";
             textColor = "text-red-600";
         }
-
-        console.log('✅ [calculateTimeDisplay] Result:', { text, minutes: diffMin });
 
         return { text, minutes: diffMin, colorClass, textColor };
     };
@@ -253,33 +361,19 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
 
     const handleMarkAsChecked = (clientId: string, app: Application) => {
         const now = new Date();
-        // Use ISO format for reliable parsing
         const formatted = now.toISOString();
         const currentConfig = app.appointmentConfig || {};
         const currentLog = currentConfig.checkLog || [];
-
-        // For the log display, use a readable format
         const readableFormat = `${now.getDate()}/${now.getMonth() + 1} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
         const newLog = [readableFormat, ...currentLog].slice(0, 50);
-
-        console.log('🔍 [AppointmentTracker] Marking as checked:', {
-            clientId,
-            appId: app.id,
-            formatted,
-            readableFormat,
-            currentConfig,
-            newLog
-        });
 
         onUpdateApplication(clientId, app.id, {
             appointmentConfig: {
                 ...currentConfig,
-                lastChecked: formatted, // Store ISO format for accurate parsing
+                lastChecked: formatted,
                 checkLog: newLog
             }
         });
-
-        console.log('✅ [AppointmentTracker] Update sent to parent component');
     };
 
     const openValidationModal = (clientId: string, appId: string) => {
@@ -298,16 +392,11 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
         const fullDate = `${validationDate} ${validationHour}:${validationMinute}`;
 
         if (window.confirm(`Confirmer le RDV pour le ${validationDate} à ${validationHour}:${validationMinute} ?`)) {
-            // Update appointment date first
             onUpdateApplication(targetClientForValidation.clientId, targetClientForValidation.appId, {
                 appointmentDate: fullDate,
                 status: ApplicationStatus.APPOINTMENT_SET
             });
-
-            // Then update status separately to trigger history logs if needed, though updateApplication can handle it if merged.
-            // Calling updateStatus ensures consistency with App.tsx logic for Opening Logs
             onUpdateStatus(targetClientForValidation.clientId, targetClientForValidation.appId, ApplicationStatus.APPOINTMENT_SET);
-
             setShowValidationModal(false);
         }
     };
@@ -427,17 +516,7 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                 styles: { fontSize: 10, cellPadding: 3 },
                 headStyles: { fillColor: [59, 130, 246] }
             });
-
-            const pageCount = doc.internal.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setTextColor(150);
-                doc.text('Généré par VisaFlow Agency - ' + new Date().toLocaleString(), 14, doc.internal.pageSize.height - 10);
-            }
-
             doc.save(`Rapport_RDV_${logClient.name.replace(/\s+/g, '_')}.pdf`);
-
         } catch (e) {
             console.error("PDF Generation Error", e);
             alert("Erreur lors de la génération du PDF. Veuillez réessayer.");
@@ -458,6 +537,26 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
 
             {/* Header */}
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+
+                {/* IN-APP NOTIFICATION TOAST */}
+                {activeAlarm && activeAlarm.active && (
+                    <div className="fixed top-6 right-6 z-[100] animate-bounce-in bg-white dark:bg-slate-800 border-l-4 border-yellow-500 shadow-2xl rounded-r-xl p-4 max-w-sm flex items-start gap-4 ring-1 ring-black/5">
+                        <div className="bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded-full">
+                            <ClockIcon className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-bold text-slate-900 dark:text-white text-lg">Rappel {activeAlarm.time}</h4>
+                            <p className="text-slate-600 dark:text-slate-300 text-sm">C'est l'heure de vérifier les rendez-vous !</p>
+                        </div>
+                        <button
+                            onClick={() => setActiveAlarm(null)}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                )}
+
                 <div>
                     <h1 className="text-3xl font-bold flex items-center gap-3 text-slate-900 dark:text-white mb-1">
                         <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/30">
@@ -475,6 +574,16 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    <button
+                        onClick={() => setShowAlarmModal(true)}
+                        className={`px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-md ${alarms.length > 0
+                            ? 'bg-yellow-500 text-white shadow-yellow-500/30 hover:bg-yellow-600'
+                            : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                            }`}
+                    >
+                        <BellIcon className={`w-4 h-4 ${alarms.length > 0 ? 'animate-bounce' : ''}`} />
+                        {alarms.length > 0 ? `${alarms.length} Alarme(s)` : 'Alarmes'}
+                    </button>
                     <button
                         onClick={() => setCockpitMode(!cockpitMode)}
                         className={`px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-md ${cockpitMode
@@ -569,16 +678,27 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                                         ({focusedClient.activeApp.center})
                                     </span>
                                 </div>
+                                {focusedClient.notes && (
+                                    <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-3 rounded-r-xl max-w-xl shadow-sm animate-fade-in">
+                                        <div className="flex items-start gap-3">
+                                            <span className="text-2xl">📝</span>
+                                            <div>
+                                                <p className="text-xs font-bold text-yellow-700 dark:text-yellow-300 uppercase mb-0.5">Note Interne</p>
+                                                <p className="text-sm text-yellow-900 dark:text-yellow-100 italic font-medium leading-relaxed">
+                                                    "{focusedClient.notes}"
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             <div className="text-right">
-                                <div className="flex gap-2 mb-3 justify-end">
-                                    <button
-                                        onClick={() => openLogModal(focusedClient, focusedClient.activeApp)}
-                                        className="btn-ghost text-xs flex items-center gap-1"
-                                    >
-                                        <FileTextIcon className="w-3 h-3" /> Journal
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => openLogModal(focusedClient, focusedClient.activeApp)}
+                                    className="btn-ghost text-xs flex items-center gap-1"
+                                >
+                                    <FileTextIcon className="w-3 h-3" /> Journal
+                                </button>
                                 <p className="text-xs text-slate-400 dark:text-slate-500 uppercase mb-2 font-semibold">
                                     Vérifié il y a
                                 </p>
@@ -727,6 +847,11 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                                                         🔥 TOP
                                                     </span>
                                                 )}
+                                                {client.notes && (
+                                                    <div className="tooltip" data-tip={client.notes}>
+                                                        <span className="text-yellow-500 text-lg cursor-help">📝</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-4">
@@ -846,6 +971,10 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                                     <p className="text-xs text-white/70 uppercase font-semibold mb-1">Centre</p>
                                     <p className="font-medium text-white">{logClient.center}</p>
                                 </div>
+                                <div>
+                                    <p className="text-xs text-white/70 uppercase font-semibold mb-1">Compte Portail</p>
+                                    <p className="font-medium text-white">{logClient.login}</p>
+                                </div>
                             </div>
                         </div>
                         <div className="flex-grow overflow-y-auto p-4 bg-slate-50 dark:bg-slate-900/50 scrollbar-thin">
@@ -868,21 +997,24 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                                                 <span className="w-6 h-6 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-xs font-bold">
                                                     {i + 1}
                                                 </span>
-                                                <span className="font-mono font-medium text-slate-700 dark:text-slate-200 text-sm">{log}</span>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{log}</p>
+                                                    <p className="text-xs text-slate-500">Vérification manuelle</p>
+                                                </div>
                                             </div>
-                                            <span className="badge badge-success text-xs flex items-center gap-1">
-                                                <CheckCircleIcon className="w-3 h-3" /> Vérifié
-                                            </span>
+                                            <div className="text-green-600 dark:text-green-400">
+                                                <CheckCircleIcon className="w-5 h-5" />
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             )}
                         </div>
-                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex gap-3">
-                            <button onClick={handlePrintLog} className="btn-ghost flex-1 text-sm flex items-center justify-center gap-2">
+                        <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-between gap-3">
+                            <button onClick={handlePrintLog} className="flex-1 btn-ghost flex items-center justify-center gap-2">
                                 <PrinterIcon className="w-4 h-4" /> Imprimer
                             </button>
-                            <button onClick={handleDownloadLog} className="btn-primary flex-1 text-sm flex items-center justify-center gap-2">
+                            <button onClick={handleDownloadLog} className="flex-1 btn-primary flex items-center justify-center gap-2">
                                 <DownloadIcon className="w-4 h-4" /> PDF
                             </button>
                         </div>
@@ -890,129 +1022,160 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                 </div>
             )}
 
-            {/* Heatmap Modal */}
+            {/* HEATMAP MODAL */}
             {showHeatmap && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-                    <div className="card w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl animate-scale-in overflow-hidden">
-                        <div className="p-6 bg-gradient-to-r from-purple-500 to-pink-500 flex justify-between items-start">
-                            <div>
-                                <h2 className="font-bold text-2xl text-white flex items-center gap-3 mb-2">
-                                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                                        <TrendingUpIcon className="w-7 h-7 text-white" />
-                                    </div>
-                                    Historique des Ouvertures
-                                </h2>
-                                <p className="text-sm text-white/90 ml-15">Analyse des créneaux trouvés précédemment</p>
-                            </div>
-                            <button
-                                onClick={() => setShowHeatmap(false)}
-                                className="text-white/80 hover:text-white text-3xl transition-colors hover:scale-110"
-                            >
-                                &times;
-                            </button>
+                    <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <TrendingUpIcon className="w-6 h-6 text-purple-500" />
+                                Analyse des Ouvertures (24h)
+                            </h2>
+                            <button onClick={() => setShowHeatmap(false)} className="text-2xl hover:text-red-500">&times;</button>
                         </div>
-                        <div className="flex-grow overflow-y-auto p-6 space-y-6 scrollbar-thin">
-                            <div className="h-72 w-full bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 p-6 rounded-2xl border-2 border-purple-200 dark:border-purple-800 shadow-lg">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={heatmapData}>
-                                        <XAxis dataKey="name" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
-                                        <YAxis stroke="#888888" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                                        <Tooltip
-                                            cursor={{ fill: 'rgba(139, 92, 246, 0.1)' }}
-                                            contentStyle={{
-                                                borderRadius: '12px',
-                                                border: '2px solid rgb(168, 85, 247)',
-                                                boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
-                                            }}
-                                        />
-                                        <Bar
-                                            dataKey="count"
-                                            fill="url(#colorGradient)"
-                                            radius={[8, 8, 0, 0]}
-                                            barSize={24}
-                                        />
-                                        <defs>
-                                            <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor="#a855f7" stopOpacity={1} />
-                                                <stop offset="100%" stopColor="#ec4899" stopOpacity={1} />
-                                            </linearGradient>
-                                        </defs>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="space-y-3">
-                                <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
-                                    <span className="w-1 h-6 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full"></span>
-                                    Dernières Ouvertures Enregistrées
-                                </h3>
-                                {openingLogs.slice(0, 10).map((log, i) => (
-                                    <div
-                                        key={i}
-                                        className="card-hover p-4 flex justify-between items-center animate-fade-in"
-                                        style={{ animationDelay: `${i * 30}ms` }}
-                                    >
-                                        <div>
-                                            <span className="font-bold text-slate-900 dark:text-white">{log.destination}</span>
-                                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">({log.center})</span>
-                                        </div>
-                                        <span className="badge bg-gradient-to-r from-purple-500 to-pink-500 text-white font-mono shadow-md shadow-purple-500/30">
-                                            {log.dayOfWeek} {log.timeOfDay}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
+                        <div className="flex-grow w-full h-[400px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={heatmapData}>
+                                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                                    <YAxis fontSize={12} tickLine={false} axisLine={false} />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                                        cursor={{ fill: 'rgba(124, 58, 237, 0.1)' }}
+                                    />
+                                    <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl text-sm text-purple-800 dark:text-purple-200">
+                            💡 <strong>Insight:</strong> Les créneaux d'ouverture sont plus fréquents entre 09h et 11h pour cette destination.
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Manual Validation Modal */}
-            {showValidationModal && (
+            {/* ALARM MODAL */}
+            {showAlarmModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-                    <div className="card w-full max-w-md overflow-hidden shadow-2xl border-2 border-green-200 dark:border-green-800 animate-scale-in">
-                        <div className="p-6 bg-gradient-to-r from-green-500 to-emerald-500 flex justify-between items-center">
-                            <h2 className="font-bold text-xl text-white flex items-center gap-2">
-                                <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                                    <CheckCircleIcon className="w-6 h-6 text-white" />
-                                </div>
-                                Validation du RDV
-                            </h2>
-                            <button
-                                onClick={() => setShowValidationModal(false)}
-                                className="text-white/80 hover:text-white text-2xl transition-colors hover:scale-110"
-                            >
-                                ✕
+                    <div className="card w-full max-w-sm p-6 shadow-2xl animate-scale-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                                <BellIcon className="w-6 h-6" />
+                                Alarmes de Recherche
+                            </h3>
+                            <button onClick={() => setShowAlarmModal(false)} className="text-2xl hover:text-red-500">&times;</button>
+                        </div>
+
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                            Programmez des rappels sonores et visuels pour lancer vos recherches.
+                        </p>
+
+                        <div className="flex gap-2 mb-6">
+                            <input
+                                type="time"
+                                className="input flex-grow"
+                                value={newAlarmTime}
+                                onChange={(e) => setNewAlarmTime(e.target.value)}
+                            />
+                            <button onClick={addAlarm} className="btn-primary">
+                                Ajouter
                             </button>
                         </div>
-                        <div className="p-6 space-y-5">
-                            <p className="text-sm text-slate-600 dark:text-slate-300 bg-green-50 dark:bg-green-950/30 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                                Veuillez confirmer la date et l'heure du rendez-vous trouvé.
-                            </p>
 
+                        <div className="max-h-60 overflow-y-auto mb-6 pr-1 space-y-2">
+                            {alarms.length === 0 ? (
+                                <p className="text-center text-slate-400 italic text-sm">Aucune alarme programmée</p>
+                            ) : (
+                                alarms.map(alarm => (
+                                    <div key={alarm} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                        <span className="font-mono text-lg font-bold text-slate-700 dark:text-slate-200">{alarm}</span>
+                                        <button onClick={() => removeAlarm(alarm)} className="text-red-500 hover:text-red-700 p-1">
+                                            <TrashIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => triggerAlarm("TEST")}
+                            className="w-full btn-ghost text-xs flex items-center justify-center gap-2 mb-2"
+                        >
+                            🔔 Tester l'alarme (Son + Notification)
+                        </button>
+
+
+                        <div className="flex flex-col gap-2 mb-4">
+                            {Notification.permission === 'granted' ? (
+                                <div className="text-xs text-green-600 bg-green-50 p-2 rounded flex items-center gap-2">
+                                    <CheckCircleIcon className="w-4 h-4" />
+                                    Notifications actives
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => Notification.requestPermission().then(() => setShowAlarmModal(prev => !prev))}
+                                    className="text-xs text-white bg-blue-500 hover:bg-blue-600 p-2 rounded flex items-center justify-center gap-2 transition-colors"
+                                >
+                                    <BellIcon className="w-4 h-4" />
+                                    Activer les notifications
+                                </button>
+                            )}
+                            {Notification.permission === 'denied' && (
+                                <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                    ⚠️ Notifications bloquées. Vérifiez les paramètres de votre navigateur.
+                                </div>
+                            )}
+
+                            <button onClick={diagnoseNotifications} className="text-[10px] text-slate-400 underline hover:text-slate-600 text-center mt-2">
+                                Diagnostiquer un problème de notification
+                            </button>
+                        </div>
+
+                        <div className="text-xs text-center text-slate-400">
+                            Assurez-vous que le son est activé et les notifications autorisées.
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* VALIDATION MODAL */}
+            {showValidationModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                    <div className="card w-full max-w-sm p-6 shadow-2xl animate-scale-in">
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-green-600 dark:text-green-400">
+                            <CalendarIcon className="w-6 h-6" />
+                            Confirmer le Rendez-vous
+                        </h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                            Veuillez valider la date et l'heure exactes du rendez-vous obtenu.
+                        </p>
+
+                        <div className="space-y-4 mb-6">
                             <div>
-                                <label className="label">Date du RDV</label>
+                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Date</label>
                                 <input
                                     type="date"
-                                    className="input"
+                                    className="input w-full"
                                     value={validationDate}
                                     onChange={(e) => setValidationDate(e.target.value)}
                                 />
                             </div>
-
-                            <div>
-                                <label className="label">Heure du RDV</label>
-                                <div className="flex gap-3">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Heure</label>
                                     <select
-                                        className="input flex-1"
+                                        className="input w-full"
                                         value={validationHour}
                                         onChange={(e) => setValidationHour(e.target.value)}
                                     >
                                         {hoursOptions.map(h => (
-                                            <option key={h} value={h}>{h}h</option>
+                                            <option key={h} value={h}>{h}</option>
                                         ))}
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Minute</label>
                                     <select
-                                        className="input flex-1"
+                                        className="input w-full"
                                         value={validationMinute}
                                         onChange={(e) => setValidationMinute(e.target.value)}
                                     >
@@ -1022,20 +1185,26 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                                     </select>
                                 </div>
                             </div>
+                        </div>
 
+                        <div className="flex gap-3">
                             <button
-                                type="button"
-                                onClick={handleConfirmValidation}
-                                disabled={!validationDate}
-                                className="btn-success w-full py-3.5 shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => setShowValidationModal(false)}
+                                className="flex-1 btn-ghost"
                             >
-                                <CheckCircleIcon className="w-5 h-5" />
-                                Confirmer & Mettre à jour
+                                Annuler
+                            </button>
+                            <button
+                                onClick={handleConfirmValidation}
+                                className="flex-1 btn-success shadow-lg shadow-green-500/30"
+                            >
+                                Valider
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+
         </div>
     );
 };
