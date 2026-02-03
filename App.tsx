@@ -15,7 +15,7 @@ import KanbanView from './views/KanbanView';
 import LockScreen from './components/LockScreen';
 import { ViewState, Client, Application, DocumentItem, ApplicationStatus, Interaction, VisaRequirement, AppSettings, ExternalResource, TodoTask, LetterTemplate, OpeningLog } from './types';
 import { MOCK_CLIENTS, INITIAL_REQUIREMENTS, DEFAULT_SETTINGS, INITIAL_RESOURCES, INITIAL_TEMPLATES, ALERT_SOUND_B64, INITIAL_OPENING_LOGS } from './constants';
-import { saveClient, updateClient, deleteClient, saveRequirement, saveResource, deleteResource, saveTask, updateTask, deleteTask, saveTemplate, deleteTemplate, saveOpeningLog, saveSettings } from './services/firebaseService';
+import { saveClient, updateClient, deleteClient, saveRequirement, saveResource, deleteResource, saveTask, deleteTask, saveTemplate, deleteTemplate, saveOpeningLog, saveSettings } from './services/firebaseService';
 import { useFirebaseRealtime } from './services/useFirebase';
 
 const App: React.FC = () => {
@@ -645,7 +645,7 @@ const App: React.FC = () => {
         setTasks(prev => prev.map(t => {
             if (t.id === id) {
                 const updated = { ...t, completed: !t.completed };
-                updateTask(id, { completed: !t.completed }).catch(e => console.error("Error updating task:", e));
+                saveTask(updated).catch(e => console.error("Error updating task:", e));
                 return updated;
             }
             return t;

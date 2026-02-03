@@ -157,15 +157,6 @@ export const getAllTasks = async (): Promise<TodoTask[]> => {
     }
 };
 
-export const updateTask = async (taskId: string, data: Partial<TodoTask>): Promise<void> => {
-    try {
-        await updateDoc(doc(db, COLLECTIONS.TASKS, taskId), data as any);
-    } catch (error) {
-        console.error("Error updating task:", error);
-        throw error;
-    }
-};
-
 export const deleteTask = async (taskId: string): Promise<void> => {
     try {
         await deleteDoc(doc(db, COLLECTIONS.TASKS, taskId));
