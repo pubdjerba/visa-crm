@@ -16,6 +16,27 @@ import {
 import { db } from "../firebase";
 import { Client, VisaRequirement, ExternalResource, TodoTask, LetterTemplate, OpeningLog, AppSettings } from "../types";
 
+// Helper to sanitize data for Firestore (removes undefined values)
+const sanitizeData = (data: any): any => {
+    if (data === null || typeof data !== 'object') return data;
+
+    // For arrays, sanitize each element
+    if (Array.isArray(data)) {
+        return data.map(item => sanitizeData(item));
+    }
+
+    const clean: any = {};
+    for (const key in data) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+            const value = data[key];
+            if (value !== undefined) {
+                clean[key] = sanitizeData(value);
+            }
+        }
+    }
+    return clean;
+};
+
 // Collection names
 const COLLECTIONS = {
     CLIENTS: "clients",
@@ -31,7 +52,9 @@ const COLLECTIONS = {
 
 export const saveClient = async (client: Client): Promise<void> => {
     try {
-        await setDoc(doc(db, COLLECTIONS.CLIENTS, client.id), client);
+        const sanitized = sanitizeData(client);
+        await setDoc(doc(db, COLLECTIONS.CLIENTS, client.id), sanitized);
+        console.log("✅ Client saved to Firebase:", client.id);
     } catch (error) {
         console.error("Error saving client:", error);
         throw error;
@@ -60,14 +83,15 @@ export const getClient = async (clientId: string): Promise<Client | null> => {
 
 export const updateClient = async (clientId: string, data: Partial<Client>): Promise<void> => {
     try {
+        const sanitized = sanitizeData(data);
         console.log('🔥 [firebaseService] updateClient called:', {
             clientId,
-            dataKeys: Object.keys(data),
-            hasApplications: !!data.applications,
-            applicationsCount: data.applications?.length
+            dataKeys: Object.keys(sanitized),
+            hasApplications: !!sanitized.applications,
+            applicationsCount: sanitized.applications?.length
         });
 
-        await updateDoc(doc(db, COLLECTIONS.CLIENTS, clientId), data as any);
+        await updateDoc(doc(db, COLLECTIONS.CLIENTS, clientId), sanitized as any);
 
         console.log('✅ [firebaseService] updateDoc completed successfully');
     } catch (error) {
@@ -89,7 +113,9 @@ export const deleteClient = async (clientId: string): Promise<void> => {
 
 export const saveRequirement = async (requirement: VisaRequirement): Promise<void> => {
     try {
-        await setDoc(doc(db, COLLECTIONS.REQUIREMENTS, requirement.id), requirement);
+        const sanitized = sanitizeData(requirement);
+        await setDoc(doc(db, COLLECTIONS.REQUIREMENTS, requirement.id), sanitized);
+        console.log("✅ Requirement saved to Firebase:", requirement.id);
     } catch (error) {
         console.error("Error saving requirement:", error);
         throw error;
@@ -110,7 +136,9 @@ export const getAllRequirements = async (): Promise<VisaRequirement[]> => {
 
 export const saveResource = async (resource: ExternalResource): Promise<void> => {
     try {
-        await setDoc(doc(db, COLLECTIONS.RESOURCES, resource.id), resource);
+        const sanitized = sanitizeData(resource);
+        await setDoc(doc(db, COLLECTIONS.RESOURCES, resource.id), sanitized);
+        console.log("✅ Resource saved to Firebase:", resource.id);
     } catch (error) {
         console.error("Error saving resource:", error);
         throw error;
@@ -140,9 +168,34 @@ export const deleteResource = async (resourceId: string): Promise<void> => {
 
 export const saveTask = async (task: TodoTask): Promise<void> => {
     try {
-        await setDoc(doc(db, COLLECTIONS.TASKS, task.id), task);
+        // ULTRA AGGRESSIVE CLEANING - Build a completely new object
+        // Never trust the incoming task object
+        const firebaseTask: any = {
+            id: task.id,
+            text: task.text,
+            completed: task.completed || false,
+            createdAt: task.createdAt,
+            priority: task.priority || 'medium',
+            category: task.category || 'other'
+        };
+
+        // Only add dueDate if it exists and is not undefined
+        if (task.dueDate !== undefined && task.dueDate !== null && task.dueDate !== '' && task.dueDate !== 'undefined') {
+            firebaseTask.dueDate = task.dueDate;
+        }
+
+        // Only add clientId if it exists and is not undefined
+        if (task.clientId !== undefined && task.clientId !== null && task.clientId !== '' && task.clientId !== 'undefined') {
+            firebaseTask.clientId = task.clientId;
+        }
+
+        console.log("🔥🔥🔥 FINAL OBJECT TO FIREBASE:", JSON.stringify(firebaseTask, null, 2));
+
+        // Send to Firebase - this object is guaranteed to have NO undefined values
+        await setDoc(doc(db, COLLECTIONS.TASKS, task.id), firebaseTask);
+        console.log("✅ [firebaseService] Task saved successfully:", task.id);
     } catch (error) {
-        console.error("Error saving task:", error);
+        console.error("❌ [firebaseService] Error saving task:", error);
         throw error;
     }
 };
@@ -153,6 +206,17 @@ export const getAllTasks = async (): Promise<TodoTask[]> => {
         return querySnapshot.docs.map(doc => doc.data() as TodoTask);
     } catch (error) {
         console.error("Error getting tasks:", error);
+        throw error;
+    }
+};
+
+export const updateTask = async (taskId: string, data: Partial<TodoTask>): Promise<void> => {
+    try {
+        const sanitized = sanitizeData(data);
+        await updateDoc(doc(db, COLLECTIONS.TASKS, taskId), sanitized as any);
+        console.log("✅ Task updated in Firebase:", taskId);
+    } catch (error) {
+        console.error("Error updating task:", error);
         throw error;
     }
 };
@@ -170,7 +234,9 @@ export const deleteTask = async (taskId: string): Promise<void> => {
 
 export const saveTemplate = async (template: LetterTemplate): Promise<void> => {
     try {
-        await setDoc(doc(db, COLLECTIONS.TEMPLATES, template.id), template);
+        const sanitized = sanitizeData(template);
+        await setDoc(doc(db, COLLECTIONS.TEMPLATES, template.id), sanitized);
+        console.log("✅ Template saved to Firebase:", template.id);
     } catch (error) {
         console.error("Error saving template:", error);
         throw error;
@@ -200,7 +266,9 @@ export const deleteTemplate = async (templateId: string): Promise<void> => {
 
 export const saveOpeningLog = async (log: OpeningLog): Promise<void> => {
     try {
-        await setDoc(doc(db, COLLECTIONS.OPENING_LOGS, log.id), log);
+        const sanitized = sanitizeData(log);
+        await setDoc(doc(db, COLLECTIONS.OPENING_LOGS, log.id), sanitized);
+        console.log("✅ Opening log saved to Firebase:", log.id);
     } catch (error) {
         console.error("Error saving opening log:", error);
         throw error;
@@ -221,8 +289,10 @@ export const getAllOpeningLogs = async (): Promise<OpeningLog[]> => {
 
 export const saveSettings = async (settings: AppSettings): Promise<void> => {
     try {
+        const sanitized = sanitizeData(settings);
         // We use a fixed ID for settings since there's only one settings document
-        await setDoc(doc(db, COLLECTIONS.SETTINGS, "app_settings"), settings);
+        await setDoc(doc(db, COLLECTIONS.SETTINGS, "app_settings"), sanitized);
+        console.log("✅ Settings saved to Firebase");
     } catch (error) {
         console.error("Error saving settings:", error);
         throw error;

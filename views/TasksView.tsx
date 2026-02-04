@@ -22,16 +22,21 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
     // View State
     const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
     const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+    const [clientFilter, setClientFilter] = useState<string>('all');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (newTaskText.trim()) {
+            // Only pass optional fields if they have valid values
+            const clientIdValue = newTaskClient && newTaskClient.trim() !== '' ? newTaskClient : undefined;
+            const dueDateValue = newTaskDate && newTaskDate.trim() !== '' ? newTaskDate : undefined;
+
             onAddTask(
                 newTaskText,
-                newTaskDate || undefined,
+                dueDateValue,
                 newTaskPriority,
                 newTaskCategory,
-                newTaskClient || undefined
+                clientIdValue
             );
             // Reset safe defaults
             setNewTaskText('');
@@ -43,12 +48,14 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
         }
     };
 
-    const getPriorityColor = (p?: string) => {
+
+    const getPriorityCardColor = (p?: string, completed?: boolean) => {
+        if (completed) return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-60 grayscale';
         switch (p) {
-            case 'high': return 'text-red-600 bg-red-50 border-red-200';
-            case 'medium': return 'text-orange-600 bg-orange-50 border-orange-200';
-            case 'low': return 'text-blue-600 bg-blue-50 border-blue-200';
-            default: return 'text-slate-600 bg-slate-50 border-slate-200';
+            case 'high': return 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50';
+            case 'medium': return 'bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/50';
+            case 'low': return 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50';
+            default: return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
         }
     };
 
@@ -66,6 +73,9 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
         if (filter === 'active') return !t.completed;
         if (filter === 'completed') return t.completed;
         return true;
+    }).filter(t => {
+        if (clientFilter === 'all') return true;
+        return t.clientId === clientFilter;
     }).sort((a, b) => {
         // High priority first
         const pScore = { high: 3, medium: 2, low: 1 };
@@ -121,16 +131,32 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
             <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm relative">
 
                 {/* Filters */}
-                <div className="p-2 border-b border-slate-100 dark:border-slate-700 flex gap-2 overflow-x-auto">
-                    {['all', 'active', 'completed'].map(f => (
-                        <button
-                            key={f}
-                            onClick={() => setFilter(f as any)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap capitalize ${filter === f ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                <div className="p-2 border-b border-slate-100 dark:border-slate-700 flex flex-wrap gap-4 items-center">
+                    <div className="flex gap-2">
+                        {['all', 'active', 'completed'].map(f => (
+                            <button
+                                key={f}
+                                onClick={() => setFilter(f as any)}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap capitalize ${filter === f ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                            >
+                                {f === 'all' ? 'Toutes' : f === 'active' ? 'À faire' : 'Terminées'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-4 h-8">
+                        <UsersIcon className="w-4 h-4 text-slate-400" />
+                        <select
+                            value={clientFilter}
+                            onChange={(e) => setClientFilter(e.target.value)}
+                            className="text-sm bg-transparent border-none focus:ring-0 text-slate-600 dark:text-slate-300 font-medium outline-none"
                         >
-                            {f === 'all' ? 'Toutes' : f === 'active' ? 'À faire' : 'Terminées'}
-                        </button>
-                    ))}
+                            <option value="all">Tous les clients</option>
+                            {clients.map(c => (
+                                <option key={c.id} value={c.id}>{c.fullName}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 {/* CONTENT */}
@@ -140,7 +166,7 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
                             {filteredTasks.map(task => {
                                 const linkedClient = clients.find(c => c.id === task.clientId);
                                 return (
-                                    <div key={task.id} className={`group flex flex-col md:flex-row md:items-center gap-3 p-4 rounded-xl border bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition ${task.completed ? 'opacity-60 grayscale' : 'border-slate-200 dark:border-slate-700'}`}>
+                                    <div key={task.id} className={`group flex flex-col md:flex-row md:items-center gap-3 p-4 rounded-xl border shadow-sm hover:shadow-md transition ${getPriorityCardColor(task.priority, task.completed)}`}>
                                         <div className="flex items-start gap-3 flex-1">
                                             <button
                                                 onClick={() => onToggleTask(task.id)}
@@ -154,10 +180,7 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
                                                     <span className={`text-base font-semibold ${task.completed ? 'line-through decoration-slate-400' : 'text-slate-800 dark:text-white'}`}>
                                                         {task.text}
                                                     </span>
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold border ${getPriorityColor(task.priority)}`}>
-                                                        {task.priority === 'high' ? 'Haute' : task.priority === 'low' ? 'Basse' : 'Moyenne'}
-                                                    </span>
-                                                    <span className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
+                                                    <span className="text-xs bg-slate-100/50 dark:bg-slate-700/50 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
                                                         {getCategoryIcon(task.category)} {task.category || 'Autre'}
                                                     </span>
                                                 </div>
@@ -201,16 +224,15 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
                                 </h3>
                                 <div className="flex-grow overflow-y-auto space-y-3">
                                     {tasks.filter(t => !t.completed).map(task => (
-                                        <div key={task.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+                                        <div key={task.id} className={`p-3 rounded-lg shadow-sm border transition ${getPriorityCardColor(task.priority, false)}`}>
                                             <div className="flex justify-between items-start mb-2">
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold border ${getPriorityColor(task.priority)}`}>
-                                                    {task.priority || 'medium'}
-                                                </span>
-                                                <button onClick={() => onToggleTask(task.id)} className="text-slate-400 hover:text-green-500">
-                                                    <div className="w-5 h-5 rounded-full border-2 border-slate-300"></div>
+                                                <div className="flex-1">
+                                                    <p className="font-semibold text-sm text-slate-800 dark:text-white">{task.text}</p>
+                                                </div>
+                                                <button onClick={() => onToggleTask(task.id)} className="text-slate-400 hover:text-green-500 ml-2">
+                                                    <div className="w-5 h-5 rounded-full border-2 border-slate-300 bg-white dark:bg-slate-800"></div>
                                                 </button>
                                             </div>
-                                            <p className="font-semibold text-sm text-slate-800 dark:text-white mb-2">{task.text}</p>
                                             {task.clientId && (
                                                 <div className="text-[10px] text-blue-600 mb-1">
                                                     👤 {clients.find(c => c.id === task.clientId)?.fullName}
@@ -233,11 +255,8 @@ const TasksView: React.FC<TasksViewProps> = ({ tasks, onAddTask, onToggleTask, o
                                 </h3>
                                 <div className="flex-grow overflow-y-auto space-y-3">
                                     {tasks.filter(t => t.completed).map(task => (
-                                        <div key={task.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 opacity-70">
+                                        <div key={task.id} className="bg-slate-200 dark:bg-slate-800 p-3 rounded-lg shadow-sm border border-slate-300 dark:border-slate-700 opacity-60 grayscale transition">
                                             <div className="flex justify-between items-start mb-2">
-                                                <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold border text-slate-500 bg-slate-50">
-                                                    {task.priority || 'medium'}
-                                                </span>
                                                 <button onClick={() => onToggleTask(task.id)} className="text-green-500">
                                                     <CheckCircleIcon className="w-5 h-5" />
                                                 </button>

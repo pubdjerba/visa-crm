@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Client, ApplicationStatus, DocumentItem, Application, PriorityMode, LetterTemplate, FamilyMember } from '../types';
-import { FileTextIcon, MessageCircleIcon, PhoneIcon, CalendarIcon, SparklesIcon, DownloadIcon, PlusIcon, ArchiveIcon, EditIcon, SaveIcon, TrashIcon, BotIcon, FileSignatureIcon, PrinterIcon, CopyIcon, CheckCircleIcon, UsersIcon, ClockIcon, AlertTriangleIcon, GlobeIcon } from '../components/Icons';
+import { Client, ApplicationStatus, DocumentItem, Application, PriorityMode, LetterTemplate, FamilyMember, TodoTask } from '../types';
+import { FileTextIcon, MessageCircleIcon, PhoneIcon, CalendarIcon, SparklesIcon, DownloadIcon, PlusIcon, ArchiveIcon, EditIcon, SaveIcon, TrashIcon, BotIcon, FileSignatureIcon, PrinterIcon, CopyIcon, CheckCircleIcon, UsersIcon, ClockIcon, AlertTriangleIcon, GlobeIcon, ClipboardListIcon } from '../components/Icons';
 
 
 interface ClientDetailProps {
@@ -19,6 +19,10 @@ interface ClientDetailProps {
     visaTypes?: string[];
     destinations?: string[];
     templates?: LetterTemplate[];
+    tasks?: TodoTask[];
+    onAddTask?: (text: string, dueDate?: string, priority?: 'high' | 'medium' | 'low', category?: 'call' | 'email' | 'paperwork' | 'meeting' | 'other', clientId?: string) => void;
+    onToggleTask?: (id: string) => void;
+    onDeleteTask?: (id: string) => void;
 }
 
 interface TimelineEventProps {
@@ -81,9 +85,13 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
     onDeleteApplication,
     visaTypes = ['Tourisme'],
     destinations = ['France'],
-    templates = []
+    templates = [],
+    tasks = [],
+    onAddTask,
+    onToggleTask,
+    onDeleteTask
 }) => {
-    const [activeTab, setActiveTab] = useState<'info' | 'docs' | 'apps' | 'history'>('apps');
+    const [activeTab, setActiveTab] = useState<'info' | 'docs' | 'apps' | 'history' | 'tasks'>('apps');
     const [draftMessage, setDraftMessage] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [analyzingFile, setAnalyzingFile] = useState(false);
@@ -612,6 +620,7 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
                         <button onClick={() => setActiveTab('apps')} className={`flex-1 py-4 text-sm font-medium text-center transition ${activeTab === 'apps' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>Dossiers ({client.applications.length})</button>
                         <button onClick={() => setActiveTab('docs')} className={`flex-1 py-4 text-sm font-medium text-center transition ${activeTab === 'docs' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>Documents</button>
                         <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 text-sm font-medium text-center transition ${activeTab === 'history' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>Communication</button>
+                        <button onClick={() => setActiveTab('tasks')} className={`flex-1 py-4 text-sm font-medium text-center transition ${activeTab === 'tasks' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>Tâches ({tasks.filter(t => t.clientId === client.id).length})</button>
                     </div>
 
                     <div className="flex-grow overflow-y-auto p-6">
@@ -1079,6 +1088,82 @@ const ClientDetail: React.FC<ClientDetailProps> = ({
                                                             {interaction.notes}
                                                         </p>
                                                     </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Tasks Tab */}
+                        {activeTab === 'tasks' && (
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                        <ClipboardListIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                        Tâches associées
+                                    </h3>
+                                    <button
+                                        onClick={() => {
+                                            const text = prompt("Quelle tâche souhaitez-vous ajouter ?");
+                                            if (text && onAddTask) {
+                                                onAddTask(text, undefined, 'medium', 'other', client.id);
+                                            }
+                                        }}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-2 shadow-sm transition"
+                                    >
+                                        <PlusIcon className="w-4 h-4" /> Ajouter une tâche
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {tasks.filter(t => t.clientId === client.id).length === 0 ? (
+                                        <div className="text-center py-12 bg-slate-50 dark:bg-slate-900/30 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
+                                            <ClipboardListIcon className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                                            <p className="text-slate-500 dark:text-slate-400 text-sm">Aucune tâche spécifique pour ce client</p>
+                                        </div>
+                                    ) : (
+                                        tasks.filter(t => t.clientId === client.id).map(task => {
+                                            const getPriorityClass = (p?: string, completed?: boolean) => {
+                                                if (completed) return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-60 grayscale';
+                                                switch (p) {
+                                                    case 'high': return 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50';
+                                                    case 'medium': return 'bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/50';
+                                                    case 'low': return 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50';
+                                                    default: return 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
+                                                }
+                                            };
+
+                                            return (
+                                                <div key={task.id} className={`flex items-center gap-4 p-4 rounded-xl border shadow-sm hover:shadow-md transition ${getPriorityClass(task.priority, task.completed)}`}>
+                                                    <button
+                                                        onClick={() => onToggleTask?.(task.id)}
+                                                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition flex-shrink-0 ${task.completed ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-blue-500 bg-white dark:bg-slate-800'}`}
+                                                    >
+                                                        {task.completed && <CheckCircleIcon className="w-4 h-4" />}
+                                                    </button>
+                                                    <div className="flex-1">
+                                                        <p className={`font-semibold text-sm text-slate-800 dark:text-white ${task.completed ? 'line-through text-slate-400' : ''}`}>
+                                                            {task.text}
+                                                        </p>
+                                                        <div className="flex items-center gap-3 mt-1">
+                                                            {task.dueDate && (
+                                                                <span className="text-[10px] text-slate-500 flex items-center gap-1 font-medium">
+                                                                    <CalendarIcon className="w-3 h-3" /> {new Date(task.dueDate).toLocaleDateString()}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-[10px] bg-slate-100/50 dark:bg-slate-700/50 px-2 py-0.5 rounded text-slate-500 dark:text-slate-400 capitalize">
+                                                                {task.category || 'autre'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => onDeleteTask?.(task.id)}
+                                                        className="p-2 text-slate-300 hover:text-red-500 transition"
+                                                    >
+                                                        <TrashIcon className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                             );
                                         })

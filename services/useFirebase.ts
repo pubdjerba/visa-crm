@@ -339,8 +339,6 @@ export const useFirebaseRealtime = () => {
             (data) => {
                 if (mounted) {
                     setClients(data);
-                    // Cache in localStorage
-                    localStorage.setItem('visaflow_clients', JSON.stringify(data));
                 }
             },
             handleError
@@ -350,7 +348,6 @@ export const useFirebaseRealtime = () => {
             (data) => {
                 if (mounted) {
                     setRequirements(data);
-                    localStorage.setItem('visaflow_requirements', JSON.stringify(data));
                 }
             },
             handleError
@@ -360,7 +357,6 @@ export const useFirebaseRealtime = () => {
             (data) => {
                 if (mounted) {
                     setResources(data);
-                    localStorage.setItem('visaflow_resources', JSON.stringify(data));
                 }
             },
             handleError
@@ -370,7 +366,6 @@ export const useFirebaseRealtime = () => {
             (data) => {
                 if (mounted) {
                     setTasks(data);
-                    localStorage.setItem('visaflow_tasks', JSON.stringify(data));
                 }
             },
             handleError
@@ -380,7 +375,6 @@ export const useFirebaseRealtime = () => {
             (data) => {
                 if (mounted) {
                     setTemplates(data);
-                    localStorage.setItem('visaflow_templates', JSON.stringify(data));
                 }
             },
             handleError
@@ -390,7 +384,6 @@ export const useFirebaseRealtime = () => {
             (data) => {
                 if (mounted) {
                     setOpeningLogs(data);
-                    localStorage.setItem('visaflow_opening_logs', JSON.stringify(data));
                 }
             },
             handleError
@@ -400,7 +393,6 @@ export const useFirebaseRealtime = () => {
             (data) => {
                 if (mounted && data) {
                     setSettings(data);
-                    localStorage.setItem('visaflow_settings', JSON.stringify(data));
                 }
             },
             handleError

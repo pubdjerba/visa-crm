@@ -117,6 +117,7 @@ export interface AppSettings {
   menuOrder: string[];
   appPassword?: string;
   centers: { name: string; url: string }[];
+  alarms?: string[];
 }
 
 export interface TodoTask {

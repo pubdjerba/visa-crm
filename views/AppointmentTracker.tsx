@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Client, ApplicationStatus, Application, PriorityMode, OpeningLog } from '../types';
+import { Client, ApplicationStatus, Application, PriorityMode, OpeningLog, AppSettings } from '../types';
 import { BotIcon, CopyIcon, EyeIcon, MagicWandIcon, SparklesIcon, BoltIcon, TrendingUpIcon, MegaphoneIcon, ExternalLinkIcon, GridIcon, ListIcon, ClockIcon, FileTextIcon, PrinterIcon, DownloadIcon, CheckCircleIcon, CalendarIcon, TrashIcon, ArchiveIcon, SearchIcon, BellIcon } from '../components/Icons';
 import { ALERT_SOUND_B64, CHECK_FREQUENCIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -10,10 +10,12 @@ interface AppointmentTrackerProps {
     onUpdateApplication: (clientId: string, appId: string, data: Partial<Application>) => void;
     onUpdateStatus: (clientId: string, appId: string, newStatus: ApplicationStatus) => void;
     openingLogs: OpeningLog[];
-    centers: { name: string; url: string }[];
+    settings: AppSettings;
+    onUpdateSettings: (newSettings: AppSettings) => void;
 }
 
-const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpdateApplication, onUpdateStatus, openingLogs, centers }) => {
+const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpdateApplication, onUpdateStatus, openingLogs, settings, onUpdateSettings }) => {
+    const centers = settings.centers;
     const [revealedPasswordId, setRevealedPasswordId] = useState<string | null>(null);
 
     // Validation Modal State
@@ -82,40 +84,41 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
         }
     };
 
-    // --- ALARM LOGIC ---
+    // --- ALARM LOGIC (Now in Global Settings / Database) ---
     const [showAlarmModal, setShowAlarmModal] = useState(false);
-    const [alarms, setAlarms] = useState<string[]>(() => {
-        const saved = localStorage.getItem('appointmentAlarms');
-        return saved ? JSON.parse(saved) : [];
-    });
+    const alarms = settings.alarms || [];
+
+    // Local state for alarms to provide immediate UI feedback before database sync
+    const [localAlarms, setLocalAlarms] = useState<string[]>(alarms);
     const [newAlarmTime, setNewAlarmTime] = useState('');
     const [lastTriggeredTime, setLastTriggeredTime] = useState<string | null>(null);
     const [activeAlarm, setActiveAlarm] = useState<{ time: string, active: boolean } | null>(null);
 
+    // Sync localAlarms when settings change
     useEffect(() => {
-        localStorage.setItem('appointmentAlarms', JSON.stringify(alarms));
-    }, [alarms]);
+        setLocalAlarms(settings.alarms || []);
+    }, [settings.alarms]);
 
     // Request on mount if needed, but rely on button
     useEffect(() => {
-        if (alarms.length > 0 && Notification.permission === 'default') {
+        if (localAlarms.length > 0 && Notification.permission === 'default') {
             // Optional: don't force it, wait for user
         }
-    }, [alarms]);
+    }, [localAlarms]);
 
     useEffect(() => {
         const interval = setInterval(() => {
             const now = new Date();
             const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-            if (alarms.includes(currentTime) && currentTime !== lastTriggeredTime) {
+            if (localAlarms.includes(currentTime) && currentTime !== lastTriggeredTime) {
                 triggerAlarm(currentTime);
                 setLastTriggeredTime(currentTime);
             }
         }, 5000); // Check every 5 seconds
 
         return () => clearInterval(interval);
-    }, [alarms, lastTriggeredTime]);
+    }, [localAlarms, lastTriggeredTime]);
 
     const diagnoseNotifications = async () => {
         let msg = "Diagnostic Notifications:\n";
@@ -144,8 +147,12 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
     const triggerAlarm = (time: string) => {
         console.log(`⏰ Triggering Alarm for ${time}`);
 
-        // Remove the alarm from the list (Auto-delete)
-        setAlarms(prev => prev.filter(t => t !== time));
+        // Update database (Remove the alarm from the list - Auto-delete)
+        const updatedAlarms = localAlarms.filter(t => t !== time);
+        onUpdateSettings({
+            ...settings,
+            alarms: updatedAlarms
+        });
 
         // Play Sound (Oscillator)
         playAlarmSound();
@@ -170,14 +177,24 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
 
     const addAlarm = () => {
         if (!newAlarmTime) return;
-        if (!alarms.includes(newAlarmTime)) {
-            setAlarms([...alarms, newAlarmTime].sort());
+        if (!localAlarms.includes(newAlarmTime)) {
+            const updatedAlarms = [...localAlarms, newAlarmTime].sort();
+            setLocalAlarms(updatedAlarms); // Immediate UI update
+            onUpdateSettings({
+                ...settings,
+                alarms: updatedAlarms
+            });
         }
         setNewAlarmTime('');
     };
 
     const removeAlarm = (time: string) => {
-        setAlarms(alarms.filter(a => a !== time));
+        const updatedAlarms = localAlarms.filter(a => a !== time);
+        setLocalAlarms(updatedAlarms); // Immediate UI update
+        onUpdateSettings({
+            ...settings,
+            alarms: updatedAlarms
+        });
     };
 
 
@@ -576,13 +593,13 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                 <div className="flex gap-3">
                     <button
                         onClick={() => setShowAlarmModal(true)}
-                        className={`px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-md ${alarms.length > 0
+                        className={`px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-md ${localAlarms.length > 0
                             ? 'bg-yellow-500 text-white shadow-yellow-500/30 hover:bg-yellow-600'
                             : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                             }`}
                     >
-                        <BellIcon className={`w-4 h-4 ${alarms.length > 0 ? 'animate-bounce' : ''}`} />
-                        {alarms.length > 0 ? `${alarms.length} Alarme(s)` : 'Alarmes'}
+                        <BellIcon className={`w-4 h-4 ${localAlarms.length > 0 ? 'animate-bounce' : ''}`} />
+                        {localAlarms.length > 0 ? `${localAlarms.length} Alarme(s)` : 'Alarmes'}
                     </button>
                     <button
                         onClick={() => setCockpitMode(!cockpitMode)}
@@ -1082,10 +1099,10 @@ const AppointmentTracker: React.FC<AppointmentTrackerProps> = ({ clients, onUpda
                         </div>
 
                         <div className="max-h-60 overflow-y-auto mb-6 pr-1 space-y-2">
-                            {alarms.length === 0 ? (
+                            {localAlarms.length === 0 ? (
                                 <p className="text-center text-slate-400 italic text-sm">Aucune alarme programmée</p>
                             ) : (
-                                alarms.map(alarm => (
+                                localAlarms.map(alarm => (
                                     <div key={alarm} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                                         <span className="font-mono text-lg font-bold text-slate-700 dark:text-slate-200">{alarm}</span>
                                         <button onClick={() => removeAlarm(alarm)} className="text-red-500 hover:text-red-700 p-1">

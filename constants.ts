@@ -47,7 +47,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     { name: 'VFS Global', url: 'https://visa.vfsglobal.com/tun/fr/deu/login' },
     { name: 'BLS International', url: 'https://tunisia.blsspainvisa.com/french/index.php' },
     { name: 'Almaviva', url: 'https://av-services.com/' }
-  ]
+  ],
+  alarms: []
 };
 
 // Base64 encoded sound "Glass Ping" for notifications

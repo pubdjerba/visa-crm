@@ -15,7 +15,7 @@ import KanbanView from './views/KanbanView';
 import LockScreen from './components/LockScreen';
 import { ViewState, Client, Application, DocumentItem, ApplicationStatus, Interaction, VisaRequirement, AppSettings, ExternalResource, TodoTask, LetterTemplate, OpeningLog } from './types';
 import { MOCK_CLIENTS, INITIAL_REQUIREMENTS, DEFAULT_SETTINGS, INITIAL_RESOURCES, INITIAL_TEMPLATES, ALERT_SOUND_B64, INITIAL_OPENING_LOGS } from './constants';
-import { saveClient, updateClient, deleteClient, saveRequirement, saveResource, deleteResource, saveTask, deleteTask, saveTemplate, deleteTemplate, saveOpeningLog, saveSettings } from './services/firebaseService';
+import { saveClient, updateClient, deleteClient, saveRequirement, saveResource, deleteResource, saveTask, updateTask, deleteTask, saveTemplate, deleteTemplate, saveOpeningLog, saveSettings } from './services/firebaseService';
 import { useFirebaseRealtime } from './services/useFirebase';
 
 const App: React.FC = () => {
@@ -63,11 +63,61 @@ const App: React.FC = () => {
         }
     }, [firebaseResources, firebaseLoading]);
 
+    // Tasks Sync and Migration
     useEffect(() => {
         if (!firebaseLoading) {
+            // Data Migration: If Firebase is empty but localStorage has data, migrate it once.
+            if (firebaseTasks.length === 0) {
+                const localTasks = localStorage.getItem('visaflow_tasks');
+                if (localTasks) {
+                    try {
+                        const parsed = JSON.parse(localTasks);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            console.log("🚚 [Migration] Migrating tasks from localStorage to Firebase...");
+                            // Use Promise.all to ensure all tasks are saved before removing from localStorage
+                            Promise.all(parsed.map(task => saveTask(task)))
+                                .then(() => {
+                                    console.log("✅ [Migration] All tasks migrated successfully");
+                                    localStorage.removeItem('visaflow_tasks');
+                                })
+                                .catch(err => console.error("❌ [Migration] Error during task migration:", err));
+                        }
+                    } catch (e) {
+                        console.error("❌ [Migration] Error parsing local tasks:", e);
+                    }
+                }
+            }
+
+            // Sync current tasks directly from Firebase
+            console.log("🔄 [App.tsx] Syncing tasks from Firebase:", firebaseTasks.length);
             setTasks(firebaseTasks);
         }
     }, [firebaseTasks, firebaseLoading]);
+
+    // Separate migration for settings/alarms if needed
+    useEffect(() => {
+        if (!firebaseLoading && settings) {
+            // Alarms Migration
+            if (!settings.alarms || settings.alarms.length === 0) {
+                const localAlarms = localStorage.getItem('appointmentAlarms');
+                if (localAlarms) {
+                    try {
+                        const parsed = JSON.parse(localAlarms);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            console.log("⏰ [Migration] Migrating alarms from localStorage to Firebase...");
+                            handleUpdateSettings({
+                                ...settings,
+                                alarms: parsed
+                            });
+                            localStorage.removeItem('appointmentAlarms');
+                        }
+                    } catch (e) {
+                        console.error("❌ [Migration] Error parsing local alarms:", e);
+                    }
+                }
+            }
+        }
+    }, [firebaseLoading, settings]);
 
     useEffect(() => {
         if (!firebaseLoading) {
@@ -546,7 +596,14 @@ const App: React.FC = () => {
         }));
 
         if (updatedClient) {
-            updateClient(clientId, { applications: updatedClient.applications, history: updatedClient.history }).catch(e => console.error("Error updating status:", e));
+            updateClient(clientId, { applications: updatedClient.applications, history: updatedClient.history })
+                .then(() => console.log("✅ [App.tsx] Status updated in Firebase"))
+                .catch(e => {
+                    console.error("❌ [App.tsx] Error updating status:", e);
+                    if (e.code === 'permission-denied') {
+                        alert("⚠️ Erreur Firebase : Accès refusé. Vérifiez vos règles de sécurité Firestore (voir FIREBASE_TROUBLESHOOTING.md).");
+                    }
+                });
         }
 
         // Automatic Opening Log
@@ -627,25 +684,56 @@ const App: React.FC = () => {
     };
 
     const handleAddTask = (text: string, dueDate?: string, priority?: 'high' | 'medium' | 'low', category?: 'call' | 'email' | 'paperwork' | 'meeting' | 'other', clientId?: string) => {
-        const newTask: TodoTask = {
+        console.log("➕ [App.tsx] handleAddTask called:", { text, clientId, dueDate });
+
+        // Build task object conditionally to avoid any undefined values
+        const newTask: any = {
             id: `task_${Date.now()}`,
             text,
             completed: false,
             createdAt: new Date().toISOString(),
-            dueDate,
-            priority,
-            category,
-            clientId
+            priority: priority || 'medium',
+            category: category || 'other'
         };
-        setTasks(prev => [newTask, ...prev]);
-        saveTask(newTask).catch(e => console.error("Error saving task:", e));
+
+        // Only add optional fields if they have valid values
+        if (dueDate && dueDate.trim() !== "") {
+            newTask.dueDate = dueDate;
+        }
+
+        if (clientId && clientId.trim() !== "" && clientId !== "all" && clientId !== "undefined") {
+            newTask.clientId = clientId;
+        }
+
+        console.log("📦 [App.tsx] Task object to save:", newTask);
+
+        setTasks(prev => [newTask as TodoTask, ...prev]);
+        saveTask(newTask as TodoTask)
+            .then(() => console.log("✅ [App.tsx] saveTask success"))
+            .catch(e => {
+                console.error("❌ [App.tsx] Error saving task:", e);
+                // Inform user about potential permission issues
+                if (e.code === 'permission-denied') {
+                    alert("⚠️ Erreur Firebase : Impossible de sauvegarder la tâche. Vos règles de sécurité Firestore bloquent probablement l'écriture.\n\nConsultez le fichier FIREBASE_TROUBLESHOOTING.md pour la solution.");
+                } else {
+                    alert("Erreur lors de l'enregistrement de la tâche : " + e.message);
+                }
+                // Rollback local state if save failed
+                setTasks(prev => prev.filter(t => t.id !== newTask.id));
+            });
     };
 
     const handleToggleTask = (id: string) => {
+        console.log("🔘 [App.tsx] handleToggleTask called:", id);
         setTasks(prev => prev.map(t => {
             if (t.id === id) {
                 const updated = { ...t, completed: !t.completed };
-                saveTask(updated).catch(e => console.error("Error updating task:", e));
+                updateTask(id, { completed: !t.completed })
+                    .then(() => console.log("✅ [App.tsx] updateTask success"))
+                    .catch(e => {
+                        console.error("❌ [App.tsx] Error updating task:", e);
+                        alert("Erreur lors de la mise à jour de la tâche : " + e.message);
+                    });
                 return updated;
             }
             return t;
@@ -653,8 +741,14 @@ const App: React.FC = () => {
     };
 
     const handleDeleteTask = (id: string) => {
+        console.log("🗑️ [App.tsx] handleDeleteTask called:", id);
         setTasks(prev => prev.filter(t => t.id !== id));
-        deleteTask(id).catch(e => console.error("Error deleting task:", e));
+        deleteTask(id)
+            .then(() => console.log("✅ [App.tsx] deleteTask success"))
+            .catch(e => {
+                console.error("❌ [App.tsx] Error deleting task:", e);
+                // No alert here to avoid annoying user if it's already gone
+            });
     };
 
     const handleAddTemplate = (tpl: LetterTemplate) => {
@@ -742,7 +836,8 @@ const App: React.FC = () => {
                         onUpdateApplication={handleUpdateApplication}
                         onUpdateStatus={handleUpdateStatus}
                         openingLogs={openingLogs}
-                        centers={settings.centers}
+                        settings={settings}
+                        onUpdateSettings={handleUpdateSettings}
                     />
                 );
             case 'requirements':
@@ -775,6 +870,10 @@ const App: React.FC = () => {
                         visaTypes={settings.visaTypes}
                         destinations={settings.destinations}
                         templates={templates}
+                        tasks={tasks}
+                        onAddTask={handleAddTask}
+                        onToggleTask={handleToggleTask}
+                        onDeleteTask={handleDeleteTask}
                     />
                 );
             case 'calendar':
@@ -790,6 +889,13 @@ const App: React.FC = () => {
 
     return (
         <Layout currentView={currentView} onChangeView={setCurrentView} settings={settings} onLock={() => setIsLocked(true)}>
+            {/* Firebase Connection Error Banner */}
+            {firebaseError && (
+                <div className="bg-red-600 text-white p-2 text-center text-xs font-bold animate-pulse">
+                    ⚠️ Erreur de connexion Firebase : {firebaseError.message}. Vos données ne seront pas sauvegardées.
+                </div>
+            )}
+
             {isRadarActive && radarAlertQueue.length > 0 && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-900/40 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-lg w-full border-4 border-red-500 transform scale-100 animate-bounce-short">
